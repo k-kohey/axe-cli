@@ -28,8 +28,10 @@ func terminateApp(bs *buildSettings, device, deviceSetPath string) {
 	}
 }
 
-func installApp(bs *buildSettings, dirs previewDirs, device, deviceSetPath string) (string, error) {
-
+// resolveAppBundle locates the .app bundle in the build products directory.
+// It first checks BuiltProductsDir (configuration-specific), then falls back
+// to a glob across all configuration directories.
+func resolveAppBundle(bs *buildSettings, dirs previewDirs) (string, error) {
 	appName := bs.ModuleName + ".app"
 	srcAppPath := filepath.Join(bs.BuiltProductsDir, appName)
 
@@ -42,10 +44,18 @@ func installApp(bs *buildSettings, dirs previewDirs, device, deviceSetPath strin
 		srcAppPath = matches[0]
 		slog.Debug("Found app bundle via glob", "path", srcAppPath)
 	}
+	return srcAppPath, nil
+}
+
+func installApp(bs *buildSettings, dirs previewDirs, device, deviceSetPath string) (string, error) {
+	srcAppPath, err := resolveAppBundle(bs, dirs)
+	if err != nil {
+		return "", err
+	}
 
 	// Copy the app bundle to the staging directory so we can modify
 	// Info.plist without touching the original build artifacts.
-	stagedAppPath := filepath.Join(dirs.Root, appName)
+	stagedAppPath := filepath.Join(dirs.Root, filepath.Base(srcAppPath))
 	_ = os.RemoveAll(stagedAppPath)
 	if out, err := exec.Command("cp", "-a", srcAppPath, stagedAppPath).CombinedOutput(); err != nil {
 		return "", fmt.Errorf("copying app bundle to staging: %w\n%s", err, out)

@@ -19,6 +19,7 @@ var (
 	previewSelector      string
 	previewServe         bool
 	previewDevice        string
+	previewReuseBuild    bool
 )
 
 var previewCmd = &cobra.Command{
@@ -81,7 +82,7 @@ var previewCmd = &cobra.Command{
 			return err
 		}
 
-		return preview.Run(sourceFile, pc, previewWatch, previewSelector, previewServe, previewDevice)
+		return preview.Run(sourceFile, pc, previewWatch, previewSelector, previewServe, previewDevice, previewReuseBuild)
 	},
 }
 
@@ -94,5 +95,6 @@ func init() {
 	previewCmd.Flags().StringVar(&previewSelector, "preview", "", "select preview by title or index (e.g. --preview \"Dark Mode\" or --preview 1)")
 	previewCmd.Flags().BoolVar(&previewServe, "serve", false, "run as IDE backend: stream video via idb, accept JSON commands on stdin (requires idb_companion)")
 	previewCmd.Flags().StringVar(&previewDevice, "device", "", "simulator UDID to use for preview (overrides .axerc DEVICE and global default)")
+	previewCmd.Flags().BoolVar(&previewReuseBuild, "reuse-build", false, "skip xcodebuild and reuse artifacts from a previous build")
 	rootCmd.AddCommand(previewCmd)
 }

@@ -92,6 +92,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await vscode.workspace
         .getConfiguration("axe")
         .update("preview.device", udid, vscode.ConfigurationTarget.Workspace);
+      await previewManager.restartPreview(["--reuse-build"]);
     }
   }
 

@@ -76,7 +76,7 @@ export class PreviewManager {
     this.onPreviewStop = deps?.onPreviewStop;
   }
 
-  async startPreview(filePath: string): Promise<void> {
+  async startPreview(filePath: string, extraArgs?: string[]): Promise<void> {
     // Idempotent: same file → no-op
     if (this.currentFile === filePath && this.process && !this.process.killed) {
       return;
@@ -98,6 +98,9 @@ export class PreviewManager {
       ? await this.resolveExecutablePath()
       : config.executablePath;
     const args = buildArgs(filePath, config);
+    if (extraArgs) {
+      args.push(...extraArgs);
+    }
     const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
     this.outputChannel.appendLine(
@@ -188,6 +191,15 @@ export class PreviewManager {
 
       proc.kill("SIGTERM");
     });
+  }
+
+  async restartPreview(extraArgs?: string[]): Promise<void> {
+    if (!this.isRunning || !this.currentFile) {
+      return;
+    }
+    const filePath = this.currentFile;
+    await this.stopPreview();
+    await this.startPreview(filePath, extraArgs);
   }
 
   nextPreview(): void {

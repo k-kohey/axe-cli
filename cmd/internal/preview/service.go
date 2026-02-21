@@ -31,7 +31,7 @@ func (s *stepper) begin(label string) func() {
 	}
 }
 
-func Run(sourceFile string, pc ProjectConfig, watch bool, previewSelector string, serve bool, preferredDevice string) error {
+func Run(sourceFile string, pc ProjectConfig, watch bool, previewSelector string, serve bool, preferredDevice string, reuseBuild bool) error {
 	step := &stepper{total: 9}
 
 	done := step.begin("Resolving simulator...")
@@ -50,11 +50,20 @@ func Run(sourceFile string, pc ProjectConfig, watch bool, previewSelector string
 		return err
 	}
 
-	done = step.begin("Building project...")
-	err = buildProject(pc, dirs)
-	done()
-	if err != nil {
-		return err
+	if reuseBuild && hasPreviousBuild(bs, dirs) {
+		done = step.begin(fmt.Sprintf("Reusing previous build (%s)...", dirs.Build))
+		done()
+	} else {
+		label := "Building project..."
+		if reuseBuild {
+			label = "No previous build found, building project..."
+		}
+		done = step.begin(label)
+		err = buildProject(pc, dirs)
+		done()
+		if err != nil {
+			return err
+		}
 	}
 
 	extractCompilerPaths(bs, dirs)
@@ -239,4 +248,10 @@ func Run(sourceFile string, pc ProjectConfig, watch bool, previewSelector string
 	case <-bootCompanion.Done():
 		return fmt.Errorf("simulator crashed unexpectedly: %v", bootCompanion.Err())
 	}
+}
+
+// hasPreviousBuild checks whether a .app bundle exists in the build products directory.
+func hasPreviousBuild(bs *buildSettings, dirs previewDirs) bool {
+	_, err := resolveAppBundle(bs, dirs)
+	return err == nil
 }

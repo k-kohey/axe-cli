@@ -538,4 +538,75 @@ suite("PreviewManager", () => {
 
     assert.strictEqual(stopCount, 1);
   });
+
+  test("restartPreview kills process and respawns with extraArgs", async () => {
+    const procs: FakeProcess[] = [];
+    const spawnedArgs: string[][] = [];
+    const spawnFn: SpawnFn = (_cmd, args) => {
+      const p = createFakeProcess();
+      procs.push(p);
+      spawnedArgs.push(args);
+      return p;
+    };
+    const output = createFakeOutputChannel();
+    const statusBar = createFakeStatusBar();
+
+    const manager = new PreviewManager(output, statusBar, {
+      spawn: spawnFn,
+      getConfig: () => DEFAULT_CONFIG,
+    });
+
+    await manager.startPreview("/path/to/File.swift");
+    assert.strictEqual(procs.length, 1);
+    assert.strictEqual(manager.isRunning, true);
+
+    await manager.restartPreview(["--reuse-build"]);
+
+    assert.strictEqual(procs.length, 2);
+    assert.strictEqual(procs[0].killed, true);
+    assert.strictEqual(manager.isRunning, true);
+    assert.ok(
+      spawnedArgs[1].includes("--reuse-build"),
+      "second spawn should include --reuse-build"
+    );
+  });
+
+  test("startPreview appends extraArgs to spawn arguments", async () => {
+    const spawnedArgs: string[][] = [];
+    const fakeProc = createFakeProcess();
+    const spawnFn: SpawnFn = (_cmd, args) => { spawnedArgs.push(args); return fakeProc; };
+    const output = createFakeOutputChannel();
+    const statusBar = createFakeStatusBar();
+
+    const manager = new PreviewManager(output, statusBar, {
+      spawn: spawnFn,
+      getConfig: () => DEFAULT_CONFIG,
+    });
+
+    await manager.startPreview("/path/to/File.swift", ["--reuse-build"]);
+
+    assert.ok(
+      spawnedArgs[0].includes("--reuse-build"),
+      "spawn args should include --reuse-build"
+    );
+    // extraArgs should come after the base args
+    const idx = spawnedArgs[0].indexOf("--reuse-build");
+    assert.ok(idx > 0, "--reuse-build should not be the first argument");
+  });
+
+  test("restartPreview is no-op when no process is running", async () => {
+    let spawnCount = 0;
+    const spawnFn: SpawnFn = () => { spawnCount++; return createFakeProcess(); };
+    const output = createFakeOutputChannel();
+    const statusBar = createFakeStatusBar();
+
+    const manager = new PreviewManager(output, statusBar, {
+      spawn: spawnFn,
+      getConfig: () => DEFAULT_CONFIG,
+    });
+
+    await manager.restartPreview(["--reuse-build"]);
+    assert.strictEqual(spawnCount, 0);
+    assert.strictEqual(manager.isRunning, false);
+  });
 });
