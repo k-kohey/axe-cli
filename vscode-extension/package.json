@@ -1,0 +1,94 @@
+{
+  "name": "axe-swiftui-preview",
+  "displayName": "axe SwiftUI Preview",
+  "description": "Automatically run axe preview for SwiftUI #Preview files",
+  "version": "0.0.0",
+  "publisher": "k-kohey",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/k-kohey/axe.git",
+    "directory": "vscode-extension"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:swift"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "axe.startPreview",
+        "title": "axe: Start Preview"
+      },
+      {
+        "command": "axe.stopPreview",
+        "title": "axe: Stop Preview"
+      },
+      {
+        "command": "axe.nextPreview",
+        "title": "axe: Next Preview"
+      }
+    ],
+    "configuration": {
+      "title": "axe SwiftUI Preview",
+      "properties": {
+        "axe.executablePath": {
+          "type": "string",
+          "default": "axe",
+          "description": "Path to the axe binary"
+        },
+        "axe.project": {
+          "type": "string",
+          "default": "",
+          "description": "Path to .xcodeproj (--project flag). Falls back to .axerc PROJECT."
+        },
+        "axe.workspace": {
+          "type": "string",
+          "default": "",
+          "description": "Path to .xcworkspace (--workspace flag). Falls back to .axerc WORKSPACE."
+        },
+        "axe.scheme": {
+          "type": "string",
+          "default": "",
+          "description": "Xcode scheme to build (--scheme flag). Falls back to .axerc SCHEME."
+        },
+        "axe.configuration": {
+          "type": "string",
+          "default": "",
+          "description": "Build configuration (--configuration flag). Falls back to .axerc CONFIGURATION."
+        },
+        "axe.additionalArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional CLI arguments passed to axe preview"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "tsc -p ./",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^25.2.3",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.5.2",
+    "glob": "^13.0.5",
+    "mocha": "^11.7.5",
+    "@vscode/vsce": "^3.3.2",
+    "typescript": "^5.3.0"
+  }
+}
