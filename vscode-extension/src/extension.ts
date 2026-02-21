@@ -25,7 +25,9 @@ export function activate(context: vscode.ExtensionContext): void {
     resolveExecutablePath: () => resolver.resolve(),
     onStdoutLine: (line) => {
       if (line.length >= MIN_FRAME_LENGTH && BASE64_RE.test(line)) {
-        webviewPanel.show();
+        webviewPanel.show(() => {
+          previewManager.stopPreview();
+        });
         webviewPanel.postFrame(line);
       }
     },
@@ -52,6 +54,18 @@ export function activate(context: vscode.ExtensionContext): void {
   const startPreviewCmd = vscode.commands.registerCommand(
     "axe.startPreview",
     () => {
+      const editor = vscode.window.activeTextEditor;
+      if (editor) {
+        previewManager.startPreview(editor.document.uri.fsPath);
+      }
+    }
+  );
+
+  // Register showPreview command
+  const showPreviewCmd = vscode.commands.registerCommand(
+    "axe.showPreview",
+    () => {
+      webviewPanel.resetDismissed();
       const editor = vscode.window.activeTextEditor;
       if (editor) {
         previewManager.startPreview(editor.document.uri.fsPath);
@@ -118,6 +132,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     editorListener,
     startPreviewCmd,
+    showPreviewCmd,
     stopPreviewCmd,
     nextPreviewCmd,
     selectSimulatorCmd,
