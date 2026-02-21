@@ -7,6 +7,50 @@ import (
 	"testing"
 )
 
+func TestLoaderCacheKey_IncludesAllInputs(t *testing.T) {
+	base := loaderCacheKey("source", "/sdk/path", "17.0")
+
+	// Same inputs must produce the same key
+	if got := loaderCacheKey("source", "/sdk/path", "17.0"); got != base {
+		t.Errorf("same inputs produced different keys: %s vs %s", got, base)
+	}
+
+	// Changing any single input must produce a different key
+	tests := []struct {
+		name             string
+		source, sdk, dep string
+	}{
+		{"different source", "source2", "/sdk/path", "17.0"},
+		{"different sdk", "source", "/sdk/path2", "17.0"},
+		{"different deployment target", "source", "/sdk/path", "18.0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := loaderCacheKey(tt.source, tt.sdk, tt.dep); got == base {
+				t.Errorf("expected different key for %s, got same: %s", tt.name, got)
+			}
+		})
+	}
+}
+
+func TestLoaderCacheKey_NoDelimiterCollision(t *testing.T) {
+	// Fields that share a boundary must not collide.
+	// e.g. shifting content across the delimiter boundary must produce a different key.
+	a := loaderCacheKey("src", "/sdk/path", "17.0")
+	b := loaderCacheKey("src\x00/sdk", "path", "17.0")
+	if a == b {
+		t.Error("delimiter collision: different field boundaries produced the same key")
+	}
+}
+
+func TestLoaderCacheKey_Format(t *testing.T) {
+	key := loaderCacheKey("src", "/sdk", "17.0")
+	// SHA256 hex digest is 64 characters
+	if len(key) != 64 {
+		t.Errorf("expected 64-char hex digest, got %d chars: %s", len(key), key)
+	}
+}
+
 func TestSendReloadCommand_OK(t *testing.T) {
 	dir := t.TempDir()
 	sockPath := filepath.Join(dir, "test.sock")
