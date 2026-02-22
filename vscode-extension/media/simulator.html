@@ -24,22 +24,91 @@
       overflow: hidden; display: flex; flex-direction: column;
       min-height: 0;
     }
+
+    /* Centering wrapper — fills card, centers the device frame */
     .card .preview-container {
-      position: relative; background: #000;
-      display: flex; justify-content: center; align-items: center;
       flex: 1 1 0;
       min-height: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 10px 14px;
       overflow: hidden;
     }
+
+    /* Device bezel — takes full height, shrink-wraps width to image */
+    .card .device-frame {
+      position: relative;
+      height: 100%;
+      max-width: 100%;
+      padding: 6px;
+      border-radius: 44px;
+      background: linear-gradient(145deg, #4a4a4e 0%, #2a2a2c 40%, #3a3a3e 100%);
+      box-shadow:
+        0 0 0 1px #1a1a1c,
+        0 4px 20px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      display: flex;
+    }
+    /* Volume buttons (left side) */
+    .card .device-frame::before {
+      content: '';
+      position: absolute;
+      left: -3px;
+      top: 22%;
+      width: 3px;
+      height: 26px;
+      background: linear-gradient(180deg, #48484a, #2c2c2e);
+      border-radius: 2px 0 0 2px;
+      box-shadow: 0 34px 0 #3a3a3c;
+    }
+    /* Power button (right side) */
+    .card .device-frame::after {
+      content: '';
+      position: absolute;
+      right: -3px;
+      top: 18%;
+      width: 3px;
+      height: 44px;
+      background: linear-gradient(180deg, #48484a, #2c2c2e);
+      border-radius: 0 2px 2px 0;
+    }
+
+    /* Screen area — stretches to frame height, shrink-wraps width to image */
+    .card .device-screen {
+      position: relative;
+      overflow: hidden;
+      background: #000;
+      border-radius: 38px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 200px;
+      min-width: 120px;
+    }
+
     .card img {
-      max-width: 100%; max-height: 100%; object-fit: contain;
+      display: block;
+      width: auto;
+      height: auto;
+      max-height: 100%;
+      max-width: 100%;
       user-select: none; -webkit-user-drag: none;
     }
+    /* Status text shown while device frame is hidden (booting / building / error) */
     .card .status-overlay {
-      position: absolute; inset: 0;
-      display: flex; justify-content: center; align-items: center;
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
       color: #aaa; font-size: 14px;
     }
+    .card .status-overlay .spinner {
+      width: 28px; height: 28px;
+      border: 3px solid #444;
+      border-top-color: #aaa;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .card .card-info {
       padding: 8px 12px; display: flex; flex-direction: column; gap: 2px;
     }
@@ -58,92 +127,104 @@
 </head>
 <body>
   <div class="grid" id="grid"></div>
+
+  <template id="card-template">
+    <div class="card">
+      <div class="preview-container">
+        <div class="status-overlay"><div class="spinner"></div><span class="status-text">Initializing...</span></div>
+        <div class="device-frame" style="display:none">
+          <div class="device-screen">
+            <img class="preview-image" />
+          </div>
+        </div>
+      </div>
+      <div class="card-info">
+        <span class="device-name"></span>
+        <span class="file-name"></span>
+      </div>
+      <div class="card-actions">
+        <button class="btn-device">Device</button>
+        <!-- Hidden by default; shown via showNextButton message when previewCount > 1. -->
+        <button class="btn-next" style="display:none">Next</button>
+        <button class="btn-remove">&times;</button>
+      </div>
+    </div>
+  </template>
+
   <script>
     const vscode = acquireVsCodeApi();
     const grid = document.getElementById('grid');
+    const cardTemplate = document.getElementById('card-template');
 
     // Track per-card drag state.
     const dragStates = {};
+
+    /** Find a card element by streamId, optionally narrowing to a child selector. */
+    function queryCard(streamId, childSelector) {
+      const selector = '[data-stream-id="' + streamId + '"]'
+        + (childSelector ? ' ' + childSelector : '');
+      return document.querySelector(selector);
+    }
+
+    /** Convert a mouse event to normalised [0..1] coordinates relative to an element. */
+    function normalizedCoords(e, el) {
+      const rect = el.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) / rect.width,
+        y: (e.clientY - rect.top) / rect.height,
+      };
+    }
+
+    /** Same as normalizedCoords but clamps to [0, 1]. */
+    function clampedCoords(e, el) {
+      const { x, y } = normalizedCoords(e, el);
+      return {
+        x: Math.max(0, Math.min(1, x)),
+        y: Math.max(0, Math.min(1, y)),
+      };
+    }
 
     window.addEventListener('message', (e) => {
       const msg = e.data;
       switch (msg.type) {
         case 'addCard': {
-          if (document.querySelector('[data-stream-id="' + msg.streamId + '"]')) return;
-          const card = document.createElement('div');
-          card.className = 'card';
+          if (queryCard(msg.streamId)) return;
+          const card = cardTemplate.content.cloneNode(true).firstElementChild;
           card.dataset.streamId = msg.streamId;
-
-          const previewContainer = document.createElement('div');
-          previewContainer.className = 'preview-container';
-          const img = document.createElement('img');
-          img.className = 'preview-image';
-          const overlay = document.createElement('div');
-          overlay.className = 'status-overlay';
-          overlay.textContent = 'Initializing...';
-          previewContainer.appendChild(img);
-          previewContainer.appendChild(overlay);
-
-          const cardInfo = document.createElement('div');
-          cardInfo.className = 'card-info';
-          const deviceSpan = document.createElement('span');
-          deviceSpan.className = 'device-name';
-          deviceSpan.textContent = msg.deviceName || '';
-          const fileSpan = document.createElement('span');
-          fileSpan.className = 'file-name';
-          fileSpan.textContent = msg.fileName || '';
-          cardInfo.appendChild(deviceSpan);
-          cardInfo.appendChild(fileSpan);
-
-          const cardActions = document.createElement('div');
-          cardActions.className = 'card-actions';
-          const btnDevice = document.createElement('button');
-          btnDevice.className = 'btn-device';
-          btnDevice.textContent = 'Device';
-          const btnNext = document.createElement('button');
-          btnNext.className = 'btn-next';
-          // Hidden by default; shown via showNextButton message when previewCount > 1.
-          btnNext.style.display = 'none';
-          btnNext.textContent = 'Next';
-          const btnRemove = document.createElement('button');
-          btnRemove.className = 'btn-remove';
-          btnRemove.textContent = '\u00d7';
-          cardActions.appendChild(btnDevice);
-          cardActions.appendChild(btnNext);
-          cardActions.appendChild(btnRemove);
-
-          card.appendChild(previewContainer);
-          card.appendChild(cardInfo);
-          card.appendChild(cardActions);
+          card.querySelector('.device-name').textContent = msg.deviceName || '';
+          card.querySelector('.file-name').textContent = msg.fileName || '';
           grid.appendChild(card);
           setupCardEvents(card, msg.streamId);
           break;
         }
         case 'removeCard': {
-          const el = document.querySelector('[data-stream-id="' + msg.streamId + '"]');
+          const el = queryCard(msg.streamId);
           if (el) el.remove();
           delete dragStates[msg.streamId];
           break;
         }
         case 'frame': {
-          const img = document.querySelector('[data-stream-id="' + msg.streamId + '"] .preview-image');
+          const img = queryCard(msg.streamId, '.preview-image');
           if (img) {
             img.src = 'data:image/jpeg;base64,' + msg.data;
-            const overlay = document.querySelector('[data-stream-id="' + msg.streamId + '"] .status-overlay');
+            const frame = queryCard(msg.streamId, '.device-frame');
+            if (frame) frame.style.display = '';
+            const overlay = queryCard(msg.streamId, '.status-overlay');
             if (overlay) overlay.style.display = 'none';
           }
           break;
         }
         case 'status': {
-          const overlay = document.querySelector('[data-stream-id="' + msg.streamId + '"] .status-overlay');
-          if (overlay) {
-            overlay.textContent = msg.phase;
-            overlay.style.display = 'flex';
-          }
+          const frame = queryCard(msg.streamId, '.device-frame');
+          if (frame) frame.style.display = 'none';
+          const text = queryCard(msg.streamId, '.status-text');
+          if (text) text.textContent = msg.phase;
+          const overlay = queryCard(msg.streamId, '.status-overlay');
+          if (overlay) overlay.style.display = '';
           break;
         }
         case 'showNextButton': {
-          const btn = document.querySelector('[data-stream-id="' + msg.streamId + '"] .btn-next');
+          const btn = queryCard(msg.streamId, '.btn-next');
           if (btn) btn.style.display = '';
           break;
         }
@@ -156,19 +237,15 @@
       // Touch events with streamId.
       img.addEventListener('mousedown', (e) => {
         e.preventDefault();
-        const rect = img.getBoundingClientRect();
         dragStates[streamId] = { moveScheduled: false };
-        const x = (e.clientX - rect.left) / rect.width;
-        const y = (e.clientY - rect.top) / rect.height;
+        const { x, y } = normalizedCoords(e, img);
         vscode.postMessage({ type: 'touchDown', streamId, x, y });
       });
       img.addEventListener('mousemove', (e) => {
         const state = dragStates[streamId];
         if (!state || state.moveScheduled) return;
         state.moveScheduled = true;
-        const rect = img.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / rect.width;
-        const y = (e.clientY - rect.top) / rect.height;
+        const { x, y } = normalizedCoords(e, img);
         requestAnimationFrame(() => {
           vscode.postMessage({ type: 'touchMove', streamId, x, y });
           state.moveScheduled = false;
@@ -176,17 +253,13 @@
       });
       img.addEventListener('mouseup', (e) => {
         if (!dragStates[streamId]) return;
-        const rect = img.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / rect.width;
-        const y = (e.clientY - rect.top) / rect.height;
+        const { x, y } = normalizedCoords(e, img);
         vscode.postMessage({ type: 'touchUp', streamId, x, y });
         delete dragStates[streamId];
       });
       img.addEventListener('mouseleave', (e) => {
         if (!dragStates[streamId]) return;
-        const rect = img.getBoundingClientRect();
-        const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+        const { x, y } = clampedCoords(e, img);
         vscode.postMessage({ type: 'touchUp', streamId, x, y });
         delete dragStates[streamId];
       });
