@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Lint and format TypeScript with Biome"
+#MISE depends=["vscode-deps"]
+
+set -euo pipefail
+cd vscode-extension && pnpm run check

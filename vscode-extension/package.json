@@ -75,16 +75,18 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "package": "vsce package",
-    "test": "node ./out/test/runTest.js"
+    "test": "node ./out/test/runTest.js",
+    "check": "biome check --write src"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.4",
     "@types/mocha": "^10.0.10",
     "@types/node": "^25.2.3",
     "@types/vscode": "^1.85.0",
     "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.3.2",
     "glob": "^13.0.5",
     "mocha": "^11.7.5",
-    "@vscode/vsce": "^3.3.2",
     "ts-proto": "^2.6.1",
     "typescript": "^5.3.0"
   }

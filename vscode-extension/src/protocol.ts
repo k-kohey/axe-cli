@@ -4,45 +4,52 @@
 
 // Re-export generated types as the public API.
 export type {
-  Command,
-  Event,
-  Frame,
-  StreamStarted,
-  StreamStopped,
-  StreamStatus,
-  AddStream,
-  RemoveStream,
-  SwitchFile,
-  NextPreview,
-  Input,
-  TouchEvent,
-  TextEvent,
+	AddStream,
+	Command,
+	Event,
+	Frame,
+	Input,
+	NextPreview,
+	RemoveStream,
+	StreamStarted,
+	StreamStatus,
+	StreamStopped,
+	SwitchFile,
+	TextEvent,
+	TouchEvent,
 } from "./generated/preview";
 
-import type { Event, Command, Frame, StreamStarted, StreamStopped, StreamStatus } from "./generated/preview";
+import type {
+	Command,
+	Event,
+	Frame,
+	StreamStarted,
+	StreamStatus,
+	StreamStopped,
+} from "./generated/preview";
 
 // --- Type guards ---
 
 export function isFrame(event: Event): event is Event & { frame: Frame } {
-  return event.frame !== undefined;
+	return event.frame !== undefined;
 }
 
 export function isStreamStarted(
-  event: Event
+	event: Event,
 ): event is Event & { streamStarted: StreamStarted } {
-  return event.streamStarted !== undefined;
+	return event.streamStarted !== undefined;
 }
 
 export function isStreamStopped(
-  event: Event
+	event: Event,
 ): event is Event & { streamStopped: StreamStopped } {
-  return event.streamStopped !== undefined;
+	return event.streamStopped !== undefined;
 }
 
 export function isStreamStatus(
-  event: Event
+	event: Event,
 ): event is Event & { streamStatus: StreamStatus } {
-  return event.streamStatus !== undefined;
+	return event.streamStatus !== undefined;
 }
 
 // --- Parsing ---
@@ -52,20 +59,24 @@ export function isStreamStatus(
  * or does not contain a streamId.
  */
 export function parseEvent(line: string): Event | undefined {
-  try {
-    const obj = JSON.parse(line);
-    if (typeof obj !== "object" || obj === null || typeof obj.streamId !== "string") {
-      return undefined;
-    }
-    return obj as Event;
-  } catch {
-    return undefined;
-  }
+	try {
+		const obj = JSON.parse(line);
+		if (
+			typeof obj !== "object" ||
+			obj === null ||
+			typeof obj.streamId !== "string"
+		) {
+			return undefined;
+		}
+		return obj as Event;
+	} catch {
+		return undefined;
+	}
 }
 
 /**
  * Serialize a Command to a JSON line (without trailing newline).
  */
 export function serializeCommand(cmd: Command): string {
-  return JSON.stringify(cmd);
+	return JSON.stringify(cmd);
 }

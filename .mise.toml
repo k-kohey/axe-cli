@@ -60,4 +60,4 @@ depends = ["test:swift", "test:go", "test:vscode"]
 # Run all checks: mise run check
 # Run individually: mise run check:fmt, check:lint, check:deadcode
 [tasks.check]
-depends = ["tidy", "check:fmt", "check:lint", "check:deadcode"]
+depends = ["tidy", "check:fmt", "check:lint", "check:deadcode", "check:biome"]
