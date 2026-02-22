@@ -25,6 +25,7 @@ type simDevice struct {
 	UDID                 string `json:"udid"`
 	State                string `json:"state"`
 	DeviceTypeIdentifier string `json:"deviceTypeIdentifier"`
+	RuntimeID            string `json:"-"` // populated by listDevicesInSet, not part of simctl JSON
 }
 
 // ResolveSimulator returns the simulator device identifier to use with simctl.
@@ -78,7 +79,9 @@ func ResolveAxeSimulator(preferredUDID string) (udid, deviceSetPath string, err 
 		return "", "", fmt.Errorf("creating axe device set directory: %w", err)
 	}
 
-	devices, err := listDevicesInSet(deviceSetPath)
+	listCtx, listCancel := simctlContext()
+	defer listCancel()
+	devices, err := listDevicesInSet(listCtx, deviceSetPath)
 	if err != nil {
 		slog.Debug("Failed to list devices in axe set, will clone", "err", err)
 	}
@@ -113,7 +116,9 @@ func ResolveAxeSimulator(preferredUDID string) (udid, deviceSetPath string, err 
 	}
 
 	slog.Info("Creating simulator in axe device set", "source", source.Name, "deviceType", source.DeviceTypeIdentifier, "runtime", runtime)
-	createdUDID, err := createDeviceInSet("axe "+source.Name+" (1)", source.DeviceTypeIdentifier, runtime, deviceSetPath)
+	createCtx, createCancel := simctlContext()
+	defer createCancel()
+	createdUDID, err := createDeviceInSet(createCtx, "axe "+source.Name+" (1)", source.DeviceTypeIdentifier, runtime, deviceSetPath)
 	if err != nil {
 		return "", "", fmt.Errorf("creating simulator: %w", err)
 	}
@@ -200,10 +205,7 @@ func findLatestIPhone() (simDevice, string, error) {
 }
 
 // listDevicesInSet returns all devices in the given custom device set.
-func listDevicesInSet(deviceSetPath string) ([]simDevice, error) {
-	ctx, cancel := simctlContext()
-	defer cancel()
-
+func listDevicesInSet(ctx context.Context, deviceSetPath string) ([]simDevice, error) {
 	out, err := exec.CommandContext(ctx, "xcrun", "simctl", "--set", deviceSetPath, "list", "devices", "--json").Output()
 	if err != nil {
 		return nil, fmt.Errorf("simctl list devices in set: %w", err)
@@ -217,7 +219,10 @@ func listDevicesInSet(deviceSetPath string) ([]simDevice, error) {
 	}
 
 	var all []simDevice
-	for _, devices := range result.Devices {
+	for runtime, devices := range result.Devices {
+		for i := range devices {
+			devices[i].RuntimeID = runtime
+		}
 		all = append(all, devices...)
 	}
 	// Sort by name for deterministic, user-friendly ordering (map iteration is random).
@@ -229,10 +234,7 @@ func listDevicesInSet(deviceSetPath string) ([]simDevice, error) {
 
 // createDeviceInSet creates a new simulator device in the specified device set.
 // Returns the UDID of the newly created device.
-func createDeviceInSet(name, deviceType, runtime, setPath string) (string, error) {
-	ctx, cancel := simctlContext()
-	defer cancel()
-
+func createDeviceInSet(ctx context.Context, name, deviceType, runtime, setPath string) (string, error) {
 	out, err := exec.CommandContext(ctx, "xcrun", "simctl", "--set", setPath,
 		"create", name, deviceType, runtime,
 	).CombinedOutput()

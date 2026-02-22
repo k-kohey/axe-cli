@@ -179,7 +179,9 @@ func Add(deviceType, runtime string, setDefault bool, store *ConfigStore) (Manag
 	seq := nextSequenceNumber(existing, baseName)
 	name := fmt.Sprintf("axe %s (%d)", baseName, seq)
 
-	udid, err := createDeviceInSet(name, deviceType, runtime, deviceSetPath)
+	createCtx, createCancel := simctlContext()
+	defer createCancel()
+	udid, err := createDeviceInSet(createCtx, name, deviceType, runtime, deviceSetPath)
 	if err != nil {
 		return ManagedSimulator{}, fmt.Errorf("creating simulator: %w", err)
 	}
@@ -213,7 +215,9 @@ func Remove(udid string, store *ConfigStore) error {
 	}
 
 	// Check if the device exists and its state.
-	devices, err := listDevicesInSet(deviceSetPath)
+	listCtx, listCancel := simctlContext()
+	defer listCancel()
+	devices, err := listDevicesInSet(listCtx, deviceSetPath)
 	if err != nil {
 		return fmt.Errorf("listing devices: %w", err)
 	}
@@ -255,16 +259,16 @@ func Remove(udid string, store *ConfigStore) error {
 // sequenceRe matches the "(N)" suffix in device names like "axe iPhone 16 Pro (2)".
 var sequenceRe = regexp.MustCompile(`\((\d+)\)\s*$`)
 
-// nextSequenceNumber finds the highest (N) among devices whose name starts with
-// "axe <baseName>" and returns max+1. Returns 1 if none exist.
-func nextSequenceNumber(devices []ManagedSimulator, baseName string) int {
+// nextSequenceFromNames finds the highest (N) among names that start with
+// "axe <baseName> (" and returns max+1. Returns 1 if none match.
+func nextSequenceFromNames(names []string, baseName string) int {
 	prefix := "axe " + baseName + " ("
 	maxN := 0
-	for _, d := range devices {
-		if !strings.HasPrefix(d.Name, prefix) {
+	for _, name := range names {
+		if !strings.HasPrefix(name, prefix) {
 			continue
 		}
-		m := sequenceRe.FindStringSubmatch(d.Name)
+		m := sequenceRe.FindStringSubmatch(name)
 		if m == nil {
 			continue
 		}
@@ -277,6 +281,16 @@ func nextSequenceNumber(devices []ManagedSimulator, baseName string) int {
 		}
 	}
 	return maxN + 1
+}
+
+// nextSequenceNumber finds the highest (N) among managed devices whose name
+// starts with "axe <baseName>" and returns max+1. Returns 1 if none exist.
+func nextSequenceNumber(devices []ManagedSimulator, baseName string) int {
+	names := make([]string, len(devices))
+	for i, d := range devices {
+		names[i] = d.Name
+	}
+	return nextSequenceFromNames(names, baseName)
 }
 
 // deviceTypeBaseName extracts the human-readable device name from a device type
