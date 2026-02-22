@@ -23,10 +23,6 @@
   "contributes": {
     "commands": [
       {
-        "command": "axe.startPreview",
-        "title": "axe: Start Preview"
-      },
-      {
         "command": "axe.showPreview",
         "title": "axe: Show Preview"
       },
@@ -37,14 +33,6 @@
       {
         "command": "axe.nextPreview",
         "title": "axe: Next Preview"
-      },
-      {
-        "command": "axe.selectSimulator",
-        "title": "axe: Select Preview Simulator"
-      },
-      {
-        "command": "axe.addSimulator",
-        "title": "axe: Add Preview Simulator"
       }
     ],
     "configuration": {
@@ -82,11 +70,6 @@
           },
           "default": [],
           "description": "Additional CLI arguments passed to axe preview"
-        },
-        "axe.preview.device": {
-          "type": "string",
-          "default": "",
-          "description": "Simulator UDID to use for preview. Set via 'axe: Select Preview Simulator' command."
         }
       }
     }
@@ -106,6 +89,7 @@
     "glob": "^13.0.5",
     "mocha": "^11.7.5",
     "@vscode/vsce": "^3.3.2",
+    "ts-proto": "^2.6.1",
     "typescript": "^5.3.0"
   }
 }
