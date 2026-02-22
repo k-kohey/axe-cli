@@ -96,13 +96,12 @@ cd vscode-extension && pnpm install && pnpm run compile && npx vsce package -o .
 
 # --- Check Tasks ---
 [tasks.check]
-description = "Run fmt, vet, and deadcode detection"
+description = "Run fmt, lint, and deadcode detection"
 depends = ["proto"]
 run = """
 gofmt -w cmd
 xcrun swift-format format --in-place --recursive cmd/internal/preview/swift-parser/Sources cmd/internal/preview/swift-parser/Tests
 xcrun swift-format lint --recursive cmd/internal/preview/swift-parser/Sources cmd/internal/preview/swift-parser/Tests
-go vet -C cmd ./...
 (cd cmd && golangci-lint run ./...)
 (cd cmd && deadcode -test ./... 2>&1 | { output=$(cat); [ -z "$output" ] && echo "deadcode: no unreachable functions found" || { echo "$output"; exit 1; }; })
 """
