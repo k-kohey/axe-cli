@@ -1,7 +1,6 @@
 package preview
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"testing"
@@ -42,7 +41,7 @@ func newTestStream(id string) *stream {
 
 func TestStreamLoop_Cancellation(t *testing.T) {
 	s := newTestStream("test-cancel")
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 	sm := NewStreamManager(newFakeDevicePool(), ew, ProjectConfig{}, "")
 
@@ -68,7 +67,7 @@ func TestStreamLoop_Cancellation(t *testing.T) {
 
 func TestStreamLoop_SwitchFile(t *testing.T) {
 	s := newTestStream("test-switch")
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 	sm := NewStreamManager(newFakeDevicePool(), ew, ProjectConfig{}, "")
 
@@ -97,7 +96,7 @@ func TestStreamLoop_SwitchFile(t *testing.T) {
 
 func TestStreamLoop_NextPreview(t *testing.T) {
 	s := newTestStream("test-next")
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 	sm := NewStreamManager(newFakeDevicePool(), ew, ProjectConfig{}, "")
 
@@ -138,7 +137,7 @@ func TestStreamLoop_NextPreview(t *testing.T) {
 
 func TestStreamLoop_BootCrash(t *testing.T) {
 	s := newTestStream("test-crash")
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 	sm := NewStreamManager(newFakeDevicePool(), ew, ProjectConfig{}, "")
 
@@ -181,7 +180,7 @@ func TestStreamLoop_BootCrash(t *testing.T) {
 
 func TestStreamLoop_IDBError(t *testing.T) {
 	s := newTestStream("test-idb-err")
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 	sm := NewStreamManager(newFakeDevicePool(), ew, ProjectConfig{}, "")
 

@@ -223,6 +223,7 @@ function getWebviewHtml(): string {
         case 'removeCard': {
           const el = document.querySelector('[data-stream-id="' + msg.streamId + '"]');
           if (el) el.remove();
+          delete dragStates[msg.streamId];
           break;
         }
         case 'frame': {

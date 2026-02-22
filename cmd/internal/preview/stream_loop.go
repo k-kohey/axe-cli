@@ -49,6 +49,12 @@ func runStreamLoop(ctx context.Context, s *stream, sm *StreamManager,
 	for {
 		select {
 		case <-ctx.Done():
+			if trackedDebounce != nil {
+				trackedDebounce.Stop()
+			}
+			if depDebounce != nil {
+				depDebounce.Stop()
+			}
 			return nil
 
 		case path := <-s.fileChangeCh:

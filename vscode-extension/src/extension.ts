@@ -61,12 +61,7 @@ export function activate(context: vscode.ExtensionContext): void {
             : event.streamStopped.message || event.streamStopped.reason;
           webviewPanel.postStatus(event.streamId, `Error: ${msg}`);
 
-          for (const [file, sid] of activeStreams) {
-            if (sid === event.streamId) {
-              activeStreams.delete(file);
-              break;
-            }
-          }
+          deleteStreamFromMap(event.streamId);
         }
       } else if (isStreamStatus(event)) {
         webviewPanel.postStatus(event.streamId, event.streamStatus.phase);
@@ -159,16 +154,31 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 }
 
-/** Resolve the axe binary path via BinaryResolver. */
-async function resolveExecPath(): Promise<string> {
-  return resolver.resolve();
+/** Find the file path associated with a streamId. */
+function findFileForStream(streamId: string): string | undefined {
+  for (const [file, sid] of activeStreams) {
+    if (sid === streamId) {
+      return file;
+    }
+  }
+  return undefined;
+}
+
+/** Remove a streamId from the activeStreams map (reverse lookup by streamId). */
+function deleteStreamFromMap(streamId: string): void {
+  for (const [file, sid] of activeStreams) {
+    if (sid === streamId) {
+      activeStreams.delete(file);
+      break;
+    }
+  }
 }
 
 /** Show device picker using the resolved binary. */
 async function pickDevice(): Promise<DeviceSelection | undefined> {
   let execPath: string;
   try {
-    execPath = await resolveExecPath();
+    execPath = await resolver.resolve();
   } catch (err) {
     vscode.window.showErrorMessage(`Failed to resolve axe binary: ${err}`);
     return undefined;
@@ -181,12 +191,7 @@ async function pickDevice(): Promise<DeviceSelection | undefined> {
 async function untrackStream(streamId: string): Promise<void> {
   await previewManager.removeStream(streamId);
   webviewPanel.removeCard(streamId);
-  for (const [file, sid] of activeStreams) {
-    if (sid === streamId) {
-      activeStreams.delete(file);
-      break;
-    }
-  }
+  deleteStreamFromMap(streamId);
   if (activeStreams.size === 0) {
     webviewPanel.dispose();
   }
@@ -216,21 +221,30 @@ async function handleEditor(editor: vscode.TextEditor): Promise<void> {
     return;
   }
 
-  // No device selected yet → user must run "axe: Show Preview" first.
-  if (!lastDevice) {
+  // Guard all async operations to prevent duplicate calls during rapid editor switch.
+  if (handleEditorBusy) {
     return;
   }
-
-  if (activeStreams.size === 0) {
-    // No active streams — start fresh.
-    await replaceWithNewStream(file, lastDevice);
-  } else {
-    // Prevent duplicate dialogs when editor switches rapidly during await.
-    if (handleEditorBusy) {
+  handleEditorBusy = true;
+  try {
+    // No device selected yet → prompt the user to pick one.
+    if (!lastDevice) {
+      const fileName = path.basename(file);
+      const choice = await vscode.window.showInformationMessage(
+        `"${fileName}" contains #Preview. Select a simulator to start?`,
+        "Select Simulator"
+      );
+      if (choice !== "Select Simulator") {
+        return;
+      }
+      await showDevicePickerAndAddStream(file);
       return;
     }
-    handleEditorBusy = true;
-    try {
+
+    if (activeStreams.size === 0) {
+      // No active streams — start fresh.
+      await replaceWithNewStream(file, lastDevice);
+    } else {
       // Other streams are active — ask the user.
       const fileName = path.basename(file);
       const choice = await vscode.window.showInformationMessage(
@@ -244,9 +258,9 @@ async function handleEditor(editor: vscode.TextEditor): Promise<void> {
         await addStreamForFile(file, lastDevice);
       }
       // Cancel → no-op.
-    } finally {
-      handleEditorBusy = false;
     }
+  } finally {
+    handleEditorBusy = false;
   }
 }
 
@@ -269,14 +283,7 @@ async function showDevicePickerAndAddStream(file: string): Promise<void> {
 
 /** Handle "Change Device" button from WebView card. */
 async function handleChangeDevice(oldStreamId: string): Promise<void> {
-  // Find the file for this stream.
-  let file: string | undefined;
-  for (const [f, sid] of activeStreams) {
-    if (sid === oldStreamId) {
-      file = f;
-      break;
-    }
-  }
+  const file = findFileForStream(oldStreamId);
   if (!file) {
     return;
   }
@@ -347,9 +354,8 @@ async function addStreamForFile(file: string, device: DeviceSelection): Promise<
 }
 
 export function deactivate(): void {
-  previewManager?.dispose();
-  webviewPanel?.dispose();
-  statusBar?.dispose();
+  // Resource disposal (previewManager, webviewPanel, statusBar, outputChannel)
+  // is handled by context.subscriptions. Only reset module-level state here.
   activeStreams.clear();
   lastDevice = null;
   handleEditorBusy = false;

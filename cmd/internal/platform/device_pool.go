@@ -15,6 +15,8 @@ import (
 
 const gcMaxAge = 14 * 24 * time.Hour // 2 weeks
 
+const simctlTimeout = 30 * time.Second
+
 // deviceKey groups pool entries by device type and runtime.
 type deviceKey struct {
 	DeviceType string
@@ -77,7 +79,9 @@ func (p *DevicePool) Acquire(ctx context.Context, deviceType, runtime string) (s
 	p.mu.Unlock()
 
 	// List existing devices (outside of lock to avoid holding mutex during I/O).
-	devices, err := p.simctl.ListDevices(ctx, p.deviceSetPath)
+	listCtx, listCancel := context.WithTimeout(ctx, simctlTimeout)
+	defer listCancel()
+	devices, err := p.simctl.ListDevices(listCtx, p.deviceSetPath)
 	if err != nil {
 		slog.Debug("Failed to list devices for clone", "err", err)
 		devices = nil
@@ -95,7 +99,9 @@ func (p *DevicePool) Acquire(ctx context.Context, deviceType, runtime string) (s
 	// Priority 2: clone an existing device.
 	if cloneSource != "" {
 		name := p.nextDeviceName(devices, deviceType)
-		udid, err := p.simctl.Clone(ctx, cloneSource, name, p.deviceSetPath)
+		cloneCtx, cloneCancel := context.WithTimeout(ctx, simctlTimeout)
+		udid, err := p.simctl.Clone(cloneCtx, cloneSource, name, p.deviceSetPath)
+		cloneCancel()
 		if err != nil {
 			slog.Warn("Clone failed, falling back to create", "source", cloneSource, "err", err)
 		} else {
@@ -112,7 +118,9 @@ func (p *DevicePool) Acquire(ctx context.Context, deviceType, runtime string) (s
 
 	// Priority 3: create a new device.
 	name := p.nextDeviceName(devices, deviceType)
-	udid, err := p.simctl.Create(ctx, name, deviceType, runtime, p.deviceSetPath)
+	createCtx, createCancel := context.WithTimeout(ctx, simctlTimeout)
+	defer createCancel()
+	udid, err := p.simctl.Create(createCtx, name, deviceType, runtime, p.deviceSetPath)
 	if err != nil {
 		return "", fmt.Errorf("creating device: %w", err)
 	}
@@ -138,8 +146,13 @@ func (p *DevicePool) Release(ctx context.Context, udid string) error {
 	delete(p.inUse, udid)
 	p.mu.Unlock()
 
-	if err := p.simctl.Shutdown(ctx, udid, p.deviceSetPath); err != nil {
+	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, simctlTimeout)
+	defer shutdownCancel()
+	if err := p.simctl.Shutdown(shutdownCtx, udid, p.deviceSetPath); err != nil {
 		// Shutdown failed — device state is unknown, don't return to pool.
+		// Still release the lock file to avoid leaking the flock.
+		p.closeLockFile(udid)
+		p.releaseLockFile(udid)
 		return fmt.Errorf("shutting down device %s: %w", udid, err)
 	}
 
@@ -171,9 +184,11 @@ func (p *DevicePool) ShutdownAll(ctx context.Context) {
 	p.mu.Unlock()
 
 	for _, entry := range all {
-		if err := p.simctl.Shutdown(ctx, entry.UDID, p.deviceSetPath); err != nil {
+		sdCtx, sdCancel := context.WithTimeout(ctx, simctlTimeout)
+		if err := p.simctl.Shutdown(sdCtx, entry.UDID, p.deviceSetPath); err != nil {
 			slog.Debug("Failed to shutdown device during ShutdownAll", "udid", entry.UDID, "err", err)
 		}
+		sdCancel()
 		p.closeLockFile(entry.UDID)
 		p.releaseLockFile(entry.UDID)
 	}
@@ -183,7 +198,9 @@ func (p *DevicePool) ShutdownAll(ctx context.Context) {
 // (lock file is acquirable) and shuts them down.
 // Called at process startup before accepting streams.
 func (p *DevicePool) CleanupOrphans(ctx context.Context) error {
-	devices, err := p.simctl.ListDevices(ctx, p.deviceSetPath)
+	listCtx, listCancel := context.WithTimeout(ctx, simctlTimeout)
+	defer listCancel()
+	devices, err := p.simctl.ListDevices(listCtx, p.deviceSetPath)
 	if err != nil {
 		return fmt.Errorf("listing devices for orphan cleanup: %w", err)
 	}
@@ -194,9 +211,11 @@ func (p *DevicePool) CleanupOrphans(ctx context.Context) error {
 		}
 		if p.isOrphaned(d.UDID) {
 			slog.Info("Cleaning up orphaned device", "udid", d.UDID, "name", d.Name)
-			if err := p.simctl.Shutdown(ctx, d.UDID, p.deviceSetPath); err != nil {
+			sdCtx, sdCancel := context.WithTimeout(ctx, simctlTimeout)
+			if err := p.simctl.Shutdown(sdCtx, d.UDID, p.deviceSetPath); err != nil {
 				slog.Warn("Failed to shutdown orphaned device", "udid", d.UDID, "err", err)
 			}
+			sdCancel()
 		}
 	}
 	return nil
@@ -205,7 +224,9 @@ func (p *DevicePool) CleanupOrphans(ctx context.Context) error {
 // GarbageCollect deletes devices that haven't been used in gcMaxAge.
 // Called at process exit to prevent disk bloat.
 func (p *DevicePool) GarbageCollect(ctx context.Context) {
-	devices, err := p.simctl.ListDevices(ctx, p.deviceSetPath)
+	listCtx, listCancel := context.WithTimeout(ctx, simctlTimeout)
+	defer listCancel()
+	devices, err := p.simctl.ListDevices(listCtx, p.deviceSetPath)
 	if err != nil {
 		slog.Debug("Failed to list devices for GC", "err", err)
 		return
@@ -231,9 +252,23 @@ func (p *DevicePool) GarbageCollect(ctx context.Context) {
 
 		if now.Sub(meta.LastUsed) > gcMaxAge {
 			slog.Info("Garbage collecting expired device", "udid", d.UDID, "name", d.Name, "lastUsed", meta.LastUsed)
-			if err := p.simctl.Delete(ctx, d.UDID, p.deviceSetPath); err != nil {
+			delCtx, delCancel := context.WithTimeout(ctx, simctlTimeout)
+			if err := p.simctl.Delete(delCtx, d.UDID, p.deviceSetPath); err != nil {
 				slog.Warn("Failed to delete expired device", "udid", d.UDID, "err", err)
+			} else {
+				// Remove from available map so stale UDIDs are not reused.
+				p.mu.Lock()
+				for key, entries := range p.available {
+					for i, e := range entries {
+						if e.UDID == d.UDID {
+							p.available[key] = append(entries[:i], entries[i+1:]...)
+							break
+						}
+					}
+				}
+				p.mu.Unlock()
 			}
+			delCancel()
 			// Clean up meta and lock files (best-effort, errors are non-fatal).
 			if err := os.Remove(filepath.Join(p.deviceSetPath, d.UDID+".meta.json")); err != nil && !os.IsNotExist(err) {
 				slog.Debug("Failed to remove meta file during GC", "udid", d.UDID, "err", err)

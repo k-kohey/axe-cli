@@ -17,7 +17,7 @@ func TestEvent_MarshalRoundTrip(t *testing.T) {
 			name: "Frame",
 			event: &pb.Event{
 				StreamId: "abc-123",
-				Payload:  &pb.Event_Frame{Frame: &pb.Frame{Device: "iPhone 16 Pro", File: "ContentView.swift", Data: "base64data"}},
+				Payload:  &pb.Event_Frame{Frame: &pb.Frame{Device: "iPhone 16 Pro", File: "HogeView.swift", Data: "base64data"}},
 			},
 		},
 		{
@@ -335,7 +335,7 @@ func TestInput_UnmarshalRoundTrip(t *testing.T) {
 }
 
 func TestStreamStopped_EmptyDiagnostic(t *testing.T) {
-	// When diagnostic is empty, protojson omits it. Verify the reason field is still present.
+	// With EmitDefaultValues, empty strings are emitted. Verify reason is present.
 	e := &pb.Event{
 		StreamId: "s1",
 		Payload:  &pb.Event_StreamStopped{StreamStopped: &pb.StreamStopped{Reason: "removed"}},

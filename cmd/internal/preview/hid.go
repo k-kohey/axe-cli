@@ -116,6 +116,16 @@ func (h *hidHandler) handleText(cmd stdinCommand) {
 
 func (h *hidHandler) handleTouchDown(cmd stdinCommand) {
 	sw, sh := h.screenWidth, h.screenHeight
+
+	// Close any existing stream first (e.g. if a previous touchUp was lost).
+	h.mu.Lock()
+	old := h.activeHIDStream
+	h.activeHIDStream = nil
+	h.mu.Unlock()
+	if old != nil {
+		_, _ = old.CloseAndRecv()
+	}
+
 	stream, err := h.client.OpenHIDStream(context.Background())
 	if err != nil {
 		slog.Warn("OpenHIDStream failed", "err", err)
@@ -155,9 +165,16 @@ func (h *hidHandler) HandleInput(input *pb.Input) {
 	if h == nil || h.client == nil || input == nil {
 		return
 	}
-	switch {
-	case input.GetText() != nil:
+	// text input does not require screen coordinates.
+	if input.GetText() != nil {
 		h.handleText(stdinCommand{Type: "text", Value: input.GetText().GetValue()})
+		return
+	}
+	if h.screenWidth <= 0 || h.screenHeight <= 0 {
+		// Cannot convert normalised coordinates without valid screen dimensions.
+		return
+	}
+	switch {
 	case input.GetTouchDown() != nil:
 		h.handleTouchDown(stdinCommand{Type: "touchDown", X: input.GetTouchDown().GetX(), Y: input.GetTouchDown().GetY()})
 	case input.GetTouchMove() != nil:

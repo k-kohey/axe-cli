@@ -19,7 +19,7 @@ export type {
   TextEvent,
 } from "./generated/preview";
 
-import type { Event, Command, Frame } from "./generated/preview";
+import type { Event, Command, Frame, StreamStarted, StreamStopped, StreamStatus } from "./generated/preview";
 
 // --- Type guards ---
 
@@ -29,19 +29,19 @@ export function isFrame(event: Event): event is Event & { frame: Frame } {
 
 export function isStreamStarted(
   event: Event
-): event is Event & { streamStarted: import("./generated/preview").StreamStarted } {
+): event is Event & { streamStarted: StreamStarted } {
   return event.streamStarted !== undefined;
 }
 
 export function isStreamStopped(
   event: Event
-): event is Event & { streamStopped: import("./generated/preview").StreamStopped } {
+): event is Event & { streamStopped: StreamStopped } {
   return event.streamStopped !== undefined;
 }
 
 export function isStreamStatus(
   event: Event
-): event is Event & { streamStatus: import("./generated/preview").StreamStatus } {
+): event is Event & { streamStatus: StreamStatus } {
   return event.streamStatus !== undefined;
 }
 

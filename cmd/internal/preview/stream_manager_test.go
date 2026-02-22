@@ -78,10 +78,10 @@ type parsedEvent struct {
 }
 
 // collectEvents parses all JSON Lines from a buffer into parsedEvents.
-func collectEvents(t *testing.T, buf *bytes.Buffer) []parsedEvent {
+func collectEvents(t *testing.T, buf *syncBuffer) []parsedEvent {
 	t.Helper()
 	var events []parsedEvent
-	scanner := bufio.NewScanner(buf)
+	scanner := bufio.NewScanner(bytes.NewReader(buf.Bytes()))
 	for scanner.Scan() {
 		var raw map[string]any
 		if err := json.Unmarshal(scanner.Bytes(), &raw); err != nil {
@@ -150,7 +150,7 @@ func newTestStreamManager(pool DevicePoolInterface, ew *EventWriter) *StreamMana
 
 func TestStreamManager_AddStream_Events(t *testing.T) {
 	pool := newFakeDevicePool()
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 
 	sm := newTestStreamManager(pool, ew)
@@ -182,7 +182,7 @@ func TestStreamManager_AddStream_Events(t *testing.T) {
 
 func TestStreamManager_RemoveStream(t *testing.T) {
 	pool := newFakeDevicePool()
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 
 	sm := newTestStreamManager(pool, ew)
@@ -233,7 +233,7 @@ func TestStreamManager_RemoveStream(t *testing.T) {
 
 func TestStreamManager_NonexistentRemove(t *testing.T) {
 	pool := newFakeDevicePool()
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 
 	sm := newTestStreamManager(pool, ew)
@@ -251,7 +251,7 @@ func TestStreamManager_NonexistentRemove(t *testing.T) {
 
 func TestStreamManager_TwoStreams(t *testing.T) {
 	pool := newFakeDevicePool()
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 
 	sm := newTestStreamManager(pool, ew)
@@ -287,7 +287,7 @@ func TestStreamManager_TwoStreams(t *testing.T) {
 
 func TestStreamManager_StopAll_ShutdownsPool(t *testing.T) {
 	pool := newFakeDevicePool()
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 
 	sm := newTestStreamManager(pool, ew)
@@ -314,7 +314,7 @@ func TestStreamManager_StopAll_ShutdownsPool(t *testing.T) {
 func TestStreamManager_AcquireError(t *testing.T) {
 	pool := newFakeDevicePool()
 	pool.acquireErr = fmt.Errorf("no devices available")
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 
 	sm := newTestStreamManager(pool, ew)
@@ -346,7 +346,7 @@ func TestStreamManager_AcquireError(t *testing.T) {
 
 func TestStreamManager_DuplicateStreamID(t *testing.T) {
 	pool := newFakeDevicePool()
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 
 	sm := newTestStreamManager(pool, ew)
@@ -373,7 +373,7 @@ func TestStreamManager_DuplicateStreamID(t *testing.T) {
 
 func TestStreamManager_EmptyCommand(t *testing.T) {
 	pool := newFakeDevicePool()
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 
 	sm := newTestStreamManager(pool, ew)
@@ -387,7 +387,7 @@ func TestStreamManager_EmptyCommand(t *testing.T) {
 // and Frame events, and RemoveStream produces StreamStopped{removed}.
 func TestStreamManager_FullLifecycle(t *testing.T) {
 	pool := newFakeDevicePool()
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 
 	sm := NewStreamManager(pool, ew, ProjectConfig{}, "")
@@ -462,7 +462,7 @@ func TestStreamManager_FullLifecycle(t *testing.T) {
 // independent Frame events with correct streamIds.
 func TestStreamManager_TwoStreamsWithFrames(t *testing.T) {
 	pool := newFakeDevicePool()
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 
 	sm := NewStreamManager(pool, ew, ProjectConfig{}, "")
@@ -511,7 +511,7 @@ func TestStreamManager_TwoStreamsWithFrames(t *testing.T) {
 // StreamStopped event is produced.
 func TestStreamManager_LauncherError_NoDoubleStopped(t *testing.T) {
 	pool := newFakeDevicePool()
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 
 	sm := NewStreamManager(pool, ew, ProjectConfig{}, "")
@@ -541,8 +541,8 @@ func TestStreamManager_LauncherError_NoDoubleStopped(t *testing.T) {
 		t.Fatal("launcher did not complete")
 	}
 
-	// Give runStream's defer a moment to clean up and self-remove.
-	time.Sleep(50 * time.Millisecond)
+	// Wait for runStream's defer to complete (self-remove from map).
+	waitForStreamCount(t, sm, 0, 2*time.Second)
 
 	// RemoveStream should be safe (stream may already be cleaned up).
 	sm.HandleCommand(ctx, &pb.Command{
@@ -568,7 +568,7 @@ func TestStreamManager_LauncherError_NoDoubleStopped(t *testing.T) {
 // delivered to the stream's switchFileCh.
 func TestStreamManager_SwitchFileRouting(t *testing.T) {
 	pool := newFakeDevicePool()
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 
 	sm := NewStreamManager(pool, ew, ProjectConfig{}, "")
@@ -621,7 +621,7 @@ func TestStreamManager_SwitchFileRouting(t *testing.T) {
 // to the stream's inputCh.
 func TestStreamManager_InputRouting(t *testing.T) {
 	pool := newFakeDevicePool()
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 
 	sm := NewStreamManager(pool, ew, ProjectConfig{}, "")
@@ -674,7 +674,7 @@ func TestStreamManager_InputRouting(t *testing.T) {
 // error, the device is released and the stream is removed from the map.
 func TestStreamManager_CleanupOnError(t *testing.T) {
 	pool := newFakeDevicePool()
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 
 	sm := NewStreamManager(pool, ew, ProjectConfig{}, "")
@@ -700,7 +700,7 @@ func TestStreamManager_CleanupOnError(t *testing.T) {
 	}
 
 	// Wait for runStream's defer to complete cleanup.
-	time.Sleep(100 * time.Millisecond)
+	waitForStreamCount(t, sm, 0, 2*time.Second)
 
 	// Device should be released.
 	pool.mu.Lock()
@@ -725,7 +725,7 @@ func TestStreamManager_CleanupOnError(t *testing.T) {
 // delivered to the stream's nextPreviewCh.
 func TestStreamManager_NextPreviewRouting(t *testing.T) {
 	pool := newFakeDevicePool()
-	var buf bytes.Buffer
+	var buf syncBuffer
 	ew := NewEventWriter(&buf)
 
 	sm := NewStreamManager(pool, ew, ProjectConfig{}, "")
@@ -772,8 +772,27 @@ func TestStreamManager_NextPreviewRouting(t *testing.T) {
 	sm.StopAll()
 }
 
+// syncBuffer is a thread-safe bytes.Buffer wrapper for use as an io.Writer
+// shared between goroutines (e.g. EventWriter + test assertions).
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (sb *syncBuffer) Write(p []byte) (int, error) {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	return sb.buf.Write(p)
+}
+
+func (sb *syncBuffer) Bytes() []byte {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	return append([]byte(nil), sb.buf.Bytes()...)
+}
+
 // waitForEvents polls until the buffer contains at least n newlines (events).
-func waitForEvents(t *testing.T, buf *bytes.Buffer, n int, timeout time.Duration) {
+func waitForEvents(t *testing.T, buf *syncBuffer, n int, timeout time.Duration) {
 	t.Helper()
 	deadline := time.After(timeout)
 	for {
@@ -784,6 +803,26 @@ func waitForEvents(t *testing.T, buf *bytes.Buffer, n int, timeout time.Duration
 		select {
 		case <-deadline:
 			t.Fatalf("timed out waiting for %d events (got %d)", n, lines)
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
+// waitForStreamCount polls until sm.streams has exactly n entries.
+func waitForStreamCount(t *testing.T, sm *StreamManager, n int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.After(timeout)
+	for {
+		sm.mu.Lock()
+		count := len(sm.streams)
+		sm.mu.Unlock()
+		if count == n {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for stream count %d (got %d)", n, count)
 		default:
 			time.Sleep(10 * time.Millisecond)
 		}

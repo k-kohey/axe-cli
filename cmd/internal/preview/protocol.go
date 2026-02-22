@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	jsonMarshalOpts   = protojson.MarshalOptions{}
+	jsonMarshalOpts   = protojson.MarshalOptions{EmitDefaultValues: true}
 	jsonUnmarshalOpts = protojson.UnmarshalOptions{DiscardUnknown: true}
 )
 

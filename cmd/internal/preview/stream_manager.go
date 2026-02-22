@@ -226,6 +226,7 @@ func (sm *StreamManager) handleInput(streamID string, input *pb.Input) {
 // and coordinated cleanup.
 func (sm *StreamManager) runStream(ctx context.Context, s *stream) {
 	defer close(s.done)
+	defer s.cancel() // Ensure launcher goroutines (e.g. relayVideoStreamEvents) stop on normal return.
 	defer sm.cleanupStreamResources(s)
 	defer func() {
 		// Self-remove from map. If handleRemoveStream already deleted us,

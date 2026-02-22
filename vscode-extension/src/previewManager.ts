@@ -177,7 +177,7 @@ export class PreviewManager {
   }
 
   // sendCommand writes a protocol Command to the axe process stdin.
-  sendCommand(cmd: Command): void {
+  private sendCommand(cmd: Command): void {
     if (!this.process || this.process.killed || !this.process.stdin) {
       return;
     }
@@ -242,6 +242,10 @@ export class PreviewManager {
     this.process = this.spawnFn(executablePath, args, {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    this.process.stdin?.on("error", (err: Error) => {
+      this.outputChannel.appendLine(`[axe stdin] ${err.message}`);
     });
 
     this.stdoutBuf = "";

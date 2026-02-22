@@ -13,13 +13,13 @@ import {
 suite("Protocol", () => {
   suite("Event parsing", () => {
     test("parses Frame event", () => {
-      const json = '{"streamId":"a","frame":{"device":"iPhone 16 Pro","file":"ContentView.swift","data":"base64data"}}';
+      const json = '{"streamId":"a","frame":{"device":"iPhone 16 Pro","file":"HogeView.swift","data":"base64data"}}';
       const event = parseEvent(json);
       assert.ok(event);
       assert.strictEqual(event.streamId, "a");
       assert.ok(event.frame);
       assert.strictEqual(event.frame.device, "iPhone 16 Pro");
-      assert.strictEqual(event.frame.file, "ContentView.swift");
+      assert.strictEqual(event.frame.file, "HogeView.swift");
       assert.strictEqual(event.frame.data, "base64data");
     });
 

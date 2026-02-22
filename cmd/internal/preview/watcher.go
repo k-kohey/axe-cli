@@ -90,6 +90,12 @@ func runWatcher(ctx context.Context, sourceFile string, pc ProjectConfig,
 	for {
 		select {
 		case <-ctx.Done():
+			if trackedDebounce != nil {
+				trackedDebounce.Stop()
+			}
+			if depDebounce != nil {
+				depDebounce.Stop()
+			}
 			fmt.Fprintln(os.Stderr, "\nStopping watcher...")
 			return nil // cleanup handled by defer in Run
 
@@ -220,7 +226,11 @@ func runWatcher(ctx context.Context, sourceFile string, pc ProjectConfig,
 				hid.Handle(cmd)
 			}
 
-		case protoCmd := <-protoCmdCh:
+		case protoCmd, ok := <-protoCmdCh:
+			if !ok {
+				protoCmdCh = nil // channel closed (EOF) → disable this case
+				continue
+			}
 			switch {
 			case protoCmd.GetSwitchFile() != nil:
 				if protoCmd.GetSwitchFile().GetFile() == "" {
