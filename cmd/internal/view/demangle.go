@@ -72,7 +72,7 @@ func collectClassNames(data *rawBplistData) []string {
 
 	for k, v := range data.Classmap {
 		seen[k] = struct{}{}
-		for _, part := range strings.Split(v, "/") {
+		for part := range strings.SplitSeq(v, "/") {
 			if part != "" {
 				seen[part] = struct{}{}
 			}

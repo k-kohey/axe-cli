@@ -366,7 +366,7 @@ func TestDevicePool_ConcurrentAcquire(t *testing.T) {
 	udids := make([]string, n)
 	errs := make([]error, n)
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -428,15 +428,15 @@ func TestDevicePool_CleanupOrphans_LockedDevice(t *testing.T) {
 
 	// Create and hold a lock file (simulates an active controlling process).
 	lockPath := filepath.Join(setPath, "ACTIVE-1.lock")
-	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: lockPath is constructed internally.
 	if err != nil {
 		t.Fatalf("creating lock file: %v", err)
 	}
 	defer func() { _ = lockFile.Close() }()
-	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil { //nolint:gosec // G115: Fd() fits in int.
 		t.Fatalf("acquiring lock: %v", err)
 	}
-	defer func() { _ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN) }()
+	defer func() { _ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN) }() //nolint:gosec // G115: Fd() fits in int.
 
 	err = pool.CleanupOrphans(context.Background())
 	if err != nil {
@@ -463,16 +463,16 @@ func TestDevicePool_Acquire_HoldsLockFile(t *testing.T) {
 
 	// The lock file should be held by the pool, so a non-blocking flock should fail.
 	lockPath := filepath.Join(setPath, udid+".lock")
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: lockPath is constructed internally.
 	if err != nil {
 		t.Fatalf("opening lock file: %v", err)
 	}
 	defer func() { _ = f.Close() }()
 
-	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) //nolint:gosec // G115: Fd() fits in int.
 	if err == nil {
 		t.Error("expected flock to fail (lock should be held by pool), but it succeeded")
-		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) //nolint:gosec // G115: Fd() fits in int.
 	}
 }
 
@@ -492,14 +492,14 @@ func TestDevicePool_Release_ReleasesLockFile(t *testing.T) {
 
 	// After release, the lock file should be acquirable.
 	lockPath := filepath.Join(setPath, udid+".lock")
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: lockPath is constructed internally.
 	if err != nil {
 		// Lock file may have been removed, which is also fine.
 		return
 	}
 	defer func() { _ = f.Close() }()
 
-	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) //nolint:gosec // G115: Fd() fits in int.
 	if err != nil {
 		t.Errorf("expected flock to succeed after Release, but got: %v", err)
 	} else {
@@ -550,7 +550,7 @@ func TestDevicePool_GC_Expired(t *testing.T) {
 	oldTime := time.Now().Add(-15 * 24 * time.Hour) // 15 days ago
 	meta := deviceMeta{LastUsed: oldTime}
 	data, _ := json.Marshal(meta)
-	if err := os.WriteFile(metaPath, data, 0o644); err != nil {
+	if err := os.WriteFile(metaPath, data, 0o600); err != nil {
 		t.Fatalf("writing meta: %v", err)
 	}
 
@@ -573,7 +573,7 @@ func TestDevicePool_GC_Recent(t *testing.T) {
 	metaPath := filepath.Join(setPath, "RECENT-1.meta.json")
 	meta := deviceMeta{LastUsed: time.Now().Add(-1 * 24 * time.Hour)} // 1 day ago
 	data, _ := json.Marshal(meta)
-	if err := os.WriteFile(metaPath, data, 0o644); err != nil {
+	if err := os.WriteFile(metaPath, data, 0o600); err != nil {
 		t.Fatalf("writing meta: %v", err)
 	}
 
@@ -618,7 +618,7 @@ func TestDevicePool_GC_InUseNotDeleted(t *testing.T) {
 	oldTime := time.Now().Add(-15 * 24 * time.Hour)
 	meta := deviceMeta{LastUsed: oldTime}
 	data, _ := json.Marshal(meta)
-	if err := os.WriteFile(metaPath, data, 0o644); err != nil {
+	if err := os.WriteFile(metaPath, data, 0o600); err != nil {
 		t.Fatalf("writing meta: %v", err)
 	}
 
@@ -757,15 +757,15 @@ func TestDevicePool_Acquire_SkipsLockedShutdownDevice(t *testing.T) {
 
 	// Hold a lock on this device (simulates another process using it).
 	lockPath := filepath.Join(setPath, "LOCKED-1.lock")
-	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: lockPath is constructed internally.
 	if err != nil {
 		t.Fatalf("creating lock file: %v", err)
 	}
 	defer func() { _ = lockFile.Close() }()
-	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil { //nolint:gosec // G115: Fd() fits in int.
 		t.Fatalf("acquiring lock: %v", err)
 	}
-	defer func() { _ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN) }()
+	defer func() { _ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN) }() //nolint:gosec // G115: Fd() fits in int.
 
 	udid, err := pool.Acquire(context.Background(), testDeviceType, testRuntime)
 	if err != nil {

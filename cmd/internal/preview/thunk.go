@@ -14,8 +14,8 @@ var thunkFuncMap = template.FuncMap{
 	// topLevelName extracts the top-level type name from a potentially qualified name.
 	// e.g. "HelloView.HogeView" → "HelloView", "SimpleView" → "SimpleView"
 	"topLevelName": func(name string) string {
-		if i := strings.Index(name, "."); i >= 0 {
-			return name[:i]
+		if before, _, ok := strings.Cut(name, "."); ok {
+			return before
 		}
 		return name
 	},

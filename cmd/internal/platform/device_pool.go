@@ -151,7 +151,7 @@ func (p *DevicePool) Acquire(ctx context.Context, deviceType, runtime string) (s
 	// Loop to retry if a concurrent Acquire (Priority 2) claims the device
 	// between Create and the inUse registration.
 	const maxCreateRetries = 3
-	for attempt := 0; attempt < maxCreateRetries; attempt++ {
+	for range maxCreateRetries {
 		name := p.nextDeviceName(devices, deviceType)
 		createCtx, createCancel := context.WithTimeout(ctx, simctlTimeout)
 		udid, err := p.simctl.Create(createCtx, name, deviceType, runtime, p.deviceSetPath)
@@ -330,12 +330,12 @@ func (p *DevicePool) GarbageCollect(ctx context.Context) {
 // Returns true if the lock was successfully acquired.
 func (p *DevicePool) acquireLockFile(udid string) bool {
 	lockPath := filepath.Join(p.deviceSetPath, udid+".lock")
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: lockPath is constructed internally.
 	if err != nil {
 		slog.Debug("Failed to open lock file", "path", lockPath, "err", err)
 		return false
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil { //nolint:gosec // G115: Fd() fits in int.
 		slog.Debug("Failed to acquire flock", "path", lockPath, "err", err)
 		_ = f.Close()
 		return false
@@ -358,7 +358,7 @@ func (p *DevicePool) closeLockFile(udid string) {
 	p.mu.Unlock()
 
 	if ok {
-		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) //nolint:gosec // G115: Fd() fits in int.
 		_ = f.Close()
 	}
 }
@@ -368,20 +368,20 @@ func (p *DevicePool) closeLockFile(udid string) {
 // the controlling process is gone (OS releases flock on process exit).
 func (p *DevicePool) isOrphaned(udid string) bool {
 	lockPath := filepath.Join(p.deviceSetPath, udid+".lock")
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: lockPath is constructed internally.
 	if err != nil {
 		// Can't open lock file → treat as non-orphaned (safe default).
 		return false
 	}
 	defer func() { _ = f.Close() }()
 
-	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) //nolint:gosec // G115: Fd() fits in int.
 	if err != nil {
 		// Lock held by another process → device is actively managed.
 		return false
 	}
 	// Lock acquired → controlling process is gone → orphaned.
-	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) //nolint:gosec // G115: Fd() fits in int.
 	return true
 }
 
@@ -402,11 +402,11 @@ func (p *DevicePool) writeMetaFile(udid string) {
 		return
 	}
 	metaPath := filepath.Join(p.deviceSetPath, udid+".meta.json")
-	if err := os.MkdirAll(filepath.Dir(metaPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(metaPath), 0o755); err != nil { //nolint:gosec // G301: 0o755 is intentional for directories.
 		slog.Debug("Failed to create meta dir", "err", err)
 		return
 	}
-	if err := os.WriteFile(metaPath, data, 0o644); err != nil {
+	if err := os.WriteFile(metaPath, data, 0o600); err != nil {
 		slog.Debug("Failed to write meta file", "path", metaPath, "err", err)
 	}
 }
@@ -414,7 +414,7 @@ func (p *DevicePool) writeMetaFile(udid string) {
 // readMetaFile reads the meta file for a device.
 func (p *DevicePool) readMetaFile(udid string) (deviceMeta, error) {
 	metaPath := filepath.Join(p.deviceSetPath, udid+".meta.json")
-	data, err := os.ReadFile(metaPath)
+	data, err := os.ReadFile(metaPath) //nolint:gosec // G304: metaPath is constructed internally.
 	if err != nil {
 		return deviceMeta{}, err
 	}

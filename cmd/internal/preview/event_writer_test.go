@@ -52,7 +52,7 @@ func TestEventWriter_ConcurrentSend(t *testing.T) {
 
 	const n = 100
 	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()

@@ -155,8 +155,7 @@ func TestStreamManager_AddStream_Events(t *testing.T) {
 
 	sm := newTestStreamManager(pool, ew)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	sm.HandleCommand(ctx, &pb.Command{
 		StreamId: "stream-a",
@@ -187,8 +186,7 @@ func TestStreamManager_RemoveStream(t *testing.T) {
 
 	sm := newTestStreamManager(pool, ew)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	sm.HandleCommand(ctx, &pb.Command{
 		StreamId: "stream-a",
@@ -256,8 +254,7 @@ func TestStreamManager_TwoStreams(t *testing.T) {
 
 	sm := newTestStreamManager(pool, ew)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	sm.HandleCommand(ctx, &pb.Command{
 		StreamId: "stream-a",
@@ -292,8 +289,7 @@ func TestStreamManager_StopAll_ShutdownsPool(t *testing.T) {
 
 	sm := newTestStreamManager(pool, ew)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	sm.HandleCommand(ctx, &pb.Command{
 		StreamId: "stream-a",
@@ -352,8 +348,7 @@ func TestStreamManager_DuplicateStreamID(t *testing.T) {
 	sm := newTestStreamManager(pool, ew)
 	defer sm.StopAll()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	sm.HandleCommand(ctx, &pb.Command{
 		StreamId: "stream-a",
@@ -413,8 +408,7 @@ func TestStreamManager_FullLifecycle(t *testing.T) {
 		<-ctx.Done()
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	sm.HandleCommand(ctx, &pb.Command{
 		StreamId: "stream-a",
@@ -478,8 +472,7 @@ func TestStreamManager_TwoStreamsWithFrames(t *testing.T) {
 		<-ctx.Done()
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	sm.HandleCommand(ctx, &pb.Command{
 		StreamId: "stream-a",
@@ -526,8 +519,7 @@ func TestStreamManager_LauncherError_NoDoubleStopped(t *testing.T) {
 		close(launcherDone)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	sm.HandleCommand(ctx, &pb.Command{
 		StreamId: "stream-a",
@@ -590,8 +582,7 @@ func TestStreamManager_SwitchFileRouting(t *testing.T) {
 		}
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	sm.HandleCommand(ctx, &pb.Command{
 		StreamId: "stream-a",
@@ -643,8 +634,7 @@ func TestStreamManager_InputRouting(t *testing.T) {
 		}
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	sm.HandleCommand(ctx, &pb.Command{
 		StreamId: "stream-a",
@@ -747,8 +737,7 @@ func TestStreamManager_NextPreviewRouting(t *testing.T) {
 		}
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	sm.HandleCommand(ctx, &pb.Command{
 		StreamId: "stream-a",

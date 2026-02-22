@@ -27,7 +27,7 @@ func chdir(t *testing.T, dir string) {
 func TestReadRC(t *testing.T) {
 	t.Run("parses key-value pairs", func(t *testing.T) {
 		dir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(dir, ".axerc"), []byte("APP_NAME=HogeApp\nPROJECT=./My.xcodeproj\nSCHEME=MyScheme\n"), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, ".axerc"), []byte("APP_NAME=HogeApp\nPROJECT=./My.xcodeproj\nSCHEME=MyScheme\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		chdir(t, dir)
@@ -46,7 +46,7 @@ func TestReadRC(t *testing.T) {
 
 	t.Run("skips comments and blank lines", func(t *testing.T) {
 		dir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(dir, ".axerc"), []byte("# comment\n\nAPP_NAME=Test\n"), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, ".axerc"), []byte("# comment\n\nAPP_NAME=Test\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		chdir(t, dir)
@@ -84,7 +84,7 @@ func TestResolveAppName(t *testing.T) {
 
 	t.Run("reads from .axerc when flag is empty", func(t *testing.T) {
 		dir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(dir, ".axerc"), []byte("APP_NAME=SampleApp\n"), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, ".axerc"), []byte("APP_NAME=SampleApp\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		chdir(t, dir)
@@ -237,13 +237,13 @@ func TestParseSimulatorProcesses(t *testing.T) {
 		// Create a fake .app with Info.plist
 		dir := t.TempDir()
 		appDir := filepath.Join(dir, "Fake.app")
-		if err := os.MkdirAll(appDir, 0755); err != nil {
+		if err := os.MkdirAll(appDir, 0o750); err != nil {
 			t.Fatal(err)
 		}
 
 		infoPlist := map[string]string{"CFBundleIdentifier": "com.example.fake"}
 		plistData, _ := plist.Marshal(infoPlist, plist.BinaryFormat)
-		if err := os.WriteFile(filepath.Join(appDir, "Info.plist"), plistData, 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(appDir, "Info.plist"), plistData, 0o600); err != nil {
 			t.Fatal(err)
 		}
 
@@ -252,10 +252,10 @@ func TestParseSimulatorProcesses(t *testing.T) {
 
 		// Create the nested .app dir at the expected path
 		nestedAppDir := filepath.Join(dir, "CoreSimulator", "Devices", "F31DE05D-0E6E-4DC5-B949-FB5736AB5E75", "data", "Containers", "Bundle", "Application", "ABC123", "Fake.app")
-		if err := os.MkdirAll(nestedAppDir, 0755); err != nil {
+		if err := os.MkdirAll(nestedAppDir, 0o750); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(nestedAppDir, "Info.plist"), plistData, 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(nestedAppDir, "Info.plist"), plistData, 0o600); err != nil {
 			t.Fatal(err)
 		}
 

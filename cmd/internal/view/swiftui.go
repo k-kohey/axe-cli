@@ -44,8 +44,8 @@ func extractShortName(fullType string) string {
 	}
 	// Find last dot before any generic parameters
 	base := fullType
-	if idx := strings.Index(fullType, "<"); idx >= 0 {
-		base = fullType[:idx]
+	if before, _, ok := strings.Cut(fullType, "<"); ok {
+		base = before
 	}
 	if dotIdx := strings.LastIndex(base, "."); dotIdx >= 0 {
 		suffix := fullType[dotIdx+1:]

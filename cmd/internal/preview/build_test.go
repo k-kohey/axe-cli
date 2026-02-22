@@ -131,7 +131,7 @@ func setupRespFile(t *testing.T, content string) (*buildSettings, previewDirs) {
 		t.Fatal(err)
 	}
 	respPath := filepath.Join(respDir, "arguments-abc123.resp")
-	if err := os.WriteFile(respPath, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(respPath, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return bs, dirs

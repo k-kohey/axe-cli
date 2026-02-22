@@ -18,7 +18,7 @@ func fetchBuildSettings(pc ProjectConfig, dirs previewDirs) (*buildSettings, err
 	)
 	args = append(args, "-destination", "generic/platform=iOS Simulator")
 
-	out, err := exec.Command(args[0], args[1:]...).CombinedOutput()
+	out, err := exec.Command(args[0], args[1:]...).CombinedOutput() //nolint:gosec // G204: args are constructed internally from xcodebuild settings.
 	if err != nil {
 		return nil, fmt.Errorf("xcodebuild -showBuildSettings failed: %w\n%s", err, out)
 	}
@@ -35,8 +35,8 @@ func fetchBuildSettings(pc ProjectConfig, dirs previewDirs) (*buildSettings, err
 		line := strings.TrimSpace(scanner.Text())
 		for k := range keys {
 			prefix := k + " = "
-			if strings.HasPrefix(line, prefix) {
-				keys[k] = strings.TrimSpace(strings.TrimPrefix(line, prefix))
+			if after, ok := strings.CutPrefix(line, prefix); ok {
+				keys[k] = strings.TrimSpace(after)
 			}
 		}
 	}
@@ -93,7 +93,7 @@ func buildProject(ctx context.Context, pc ProjectConfig, dirs previewDirs) error
 		"OTHER_SWIFT_FLAGS=-Xfrontend -enable-implicit-dynamic -Xfrontend -enable-private-imports",
 	)
 
-	out, err := exec.Command(args[0], args[1:]...).CombinedOutput()
+	out, err := exec.Command(args[0], args[1:]...).CombinedOutput() //nolint:gosec // G204: args are constructed internally from xcodebuild settings.
 	if err != nil {
 		return fmt.Errorf("xcodebuild build failed: %w\n%s", err, out)
 	}
@@ -142,8 +142,8 @@ func extractCompilerPaths(ctx context.Context, bs *buildSettings, dirs previewDi
 		line := lines[i]
 
 		// -fmodule-map-file=<path> (single line)
-		if strings.HasPrefix(line, "-fmodule-map-file=") {
-			p := strings.TrimPrefix(line, "-fmodule-map-file=")
+		if after, ok := strings.CutPrefix(line, "-fmodule-map-file="); ok {
+			p := after
 			if p != "" {
 				bs.ExtraModuleMapFiles = append(bs.ExtraModuleMapFiles, p)
 			}
@@ -151,8 +151,8 @@ func extractCompilerPaths(ctx context.Context, bs *buildSettings, dirs previewDi
 		}
 
 		// -I<path> (combined) or -I\n<path> (split across two lines)
-		if strings.HasPrefix(line, "-I") {
-			p := strings.TrimPrefix(line, "-I")
+		if after, ok := strings.CutPrefix(line, "-I"); ok {
+			p := after
 			if p == "" && i+1 < len(lines) {
 				i++
 				p = lines[i]
@@ -166,8 +166,8 @@ func extractCompilerPaths(ctx context.Context, bs *buildSettings, dirs previewDi
 		}
 
 		// -F<path> (combined) or -F\n<path> (split across two lines)
-		if strings.HasPrefix(line, "-F") {
-			p := strings.TrimPrefix(line, "-F")
+		if after, ok := strings.CutPrefix(line, "-F"); ok {
+			p := after
 			if p == "" && i+1 < len(lines) {
 				i++
 				p = lines[i]

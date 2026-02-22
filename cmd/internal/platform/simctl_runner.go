@@ -24,7 +24,7 @@ func (r *RealSimctlRunner) ListDevices(ctx context.Context, setPath string) ([]s
 }
 
 func (r *RealSimctlRunner) Clone(ctx context.Context, sourceUDID, name, setPath string) (string, error) {
-	out, err := exec.CommandContext(ctx, "xcrun", "simctl", "--set", setPath,
+	out, err := exec.CommandContext(ctx, "xcrun", "simctl", "--set", setPath, //nolint:gosec // G204: args are constructed internally.
 		"clone", sourceUDID, name,
 	).CombinedOutput()
 	if err != nil {
@@ -38,7 +38,7 @@ func (r *RealSimctlRunner) Create(ctx context.Context, name, deviceType, runtime
 }
 
 func (r *RealSimctlRunner) Shutdown(ctx context.Context, udid, setPath string) error {
-	out, err := exec.CommandContext(ctx, "xcrun", "simctl", "--set", setPath,
+	out, err := exec.CommandContext(ctx, "xcrun", "simctl", "--set", setPath, //nolint:gosec // G204: args are constructed internally.
 		"shutdown", udid,
 	).CombinedOutput()
 	if err != nil {
@@ -53,7 +53,7 @@ func (r *RealSimctlRunner) Shutdown(ctx context.Context, udid, setPath string) e
 }
 
 func (r *RealSimctlRunner) Delete(ctx context.Context, udid, setPath string) error {
-	out, err := exec.CommandContext(ctx, "xcrun", "simctl", "--set", setPath,
+	out, err := exec.CommandContext(ctx, "xcrun", "simctl", "--set", setPath, //nolint:gosec // G204: args are constructed internally.
 		"delete", udid,
 	).CombinedOutput()
 	if err != nil {

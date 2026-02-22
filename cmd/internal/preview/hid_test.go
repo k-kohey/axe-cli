@@ -109,8 +109,8 @@ func (s *mockHIDStream) Header() (metadata.MD, error) { return nil, nil }
 func (s *mockHIDStream) Trailer() metadata.MD         { return nil }
 func (s *mockHIDStream) CloseSend() error             { return nil }
 func (s *mockHIDStream) Context() context.Context     { return context.Background() }
-func (s *mockHIDStream) SendMsg(_ interface{}) error  { return nil }
-func (s *mockHIDStream) RecvMsg(_ interface{}) error  { return nil }
+func (s *mockHIDStream) SendMsg(_ any) error          { return nil }
+func (s *mockHIDStream) RecvMsg(_ any) error          { return nil }
 
 // --- Coordinate conversion ---
 

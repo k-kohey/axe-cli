@@ -38,7 +38,7 @@ func ExtractScripts() (pythonDir string, cleanup func(), err error) {
 			return "", nil, fmt.Errorf("failed to read embedded file %s: %w", entry.Name(), err)
 		}
 		dst := filepath.Join(dir, entry.Name())
-		if err := os.WriteFile(dst, data, 0644); err != nil {
+		if err := os.WriteFile(dst, data, 0o600); err != nil {
 			removeDir()
 			return "", nil, fmt.Errorf("failed to write file %s: %w", dst, err)
 		}

@@ -79,7 +79,7 @@ func TestConfigStore_LoadCorruptedJSON(t *testing.T) {
 	p := filepath.Join(dir, "config.json")
 
 	// Write invalid JSON.
-	if err := os.WriteFile(p, []byte(`{not valid json`), 0o644); err != nil {
+	if err := os.WriteFile(p, []byte(`{not valid json`), 0o600); err != nil {
 		t.Fatalf("writing corrupt file: %v", err)
 	}
 

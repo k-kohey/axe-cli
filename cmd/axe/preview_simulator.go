@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/k-kohey/axe/internal/platform"
@@ -109,23 +110,23 @@ func runSimulatorListAvailable() error {
 // joinShort joins up to maxN strings with ", " and appends "..." if truncated.
 func joinShort(ss []string, maxN int) string {
 	if len(ss) <= maxN {
-		result := ""
+		var result strings.Builder
 		for i, s := range ss {
 			if i > 0 {
-				result += ", "
+				result.WriteString(", ")
 			}
-			result += s
+			result.WriteString(s)
 		}
-		return result
+		return result.String()
 	}
-	result := ""
-	for i := 0; i < maxN; i++ {
+	var result strings.Builder
+	for i := range maxN {
 		if i > 0 {
-			result += ", "
+			result.WriteString(", ")
 		}
-		result += ss[i]
+		result.WriteString(ss[i])
 	}
-	return result + fmt.Sprintf(", ... (+%d)", len(ss)-maxN)
+	return result.String() + fmt.Sprintf(", ... (+%d)", len(ss)-maxN)
 }
 
 // --- add ---

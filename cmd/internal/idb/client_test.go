@@ -200,8 +200,7 @@ func TestClient_VideoStream(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	frames, err := client.VideoStream(ctx, 15)
 	if err != nil {

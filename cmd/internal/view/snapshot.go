@@ -18,7 +18,7 @@ func validatePNG(data []byte) bool {
 // saveSnapshotToTemp writes PNG data to a temp file and returns the path.
 func saveSnapshotToTemp(pngData []byte, address string) (string, error) {
 	path := filepath.Join(os.TempDir(), fmt.Sprintf("axe_snapshot_%s.png", address))
-	if err := os.WriteFile(path, pngData, 0644); err != nil {
+	if err := os.WriteFile(path, pngData, 0o600); err != nil {
 		return "", fmt.Errorf("failed to write snapshot: %w", err)
 	}
 	return path, nil

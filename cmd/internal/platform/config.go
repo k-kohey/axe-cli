@@ -25,7 +25,7 @@ func ReadRC() map[string]string {
 		return nil
 	}
 
-	f, err := os.Open(filepath.Join(cwd, ".axerc"))
+	f, err := os.Open(filepath.Join(cwd, ".axerc")) //nolint:gosec // G304: path is constructed from cwd.
 	if err != nil {
 		return nil
 	}
@@ -91,7 +91,7 @@ func ListSimulatorProcesses() ([]SimProcess, error) {
 // parseSimulatorProcesses parses ps output and returns simulator app processes.
 func parseSimulatorProcesses(psOutput string, deviceMap map[string]string) []SimProcess {
 	var procs []SimProcess
-	for _, line := range strings.Split(strings.TrimSpace(psOutput), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(psOutput), "\n") {
 		line = strings.TrimSpace(line)
 		if !strings.Contains(line, "CoreSimulator/Devices/") {
 			continue
@@ -143,7 +143,7 @@ func parseSimulatorProcesses(psOutput string, deviceMap map[string]string) []Sim
 
 // readBundleID reads CFBundleIdentifier from the Info.plist inside an .app bundle.
 func readBundleID(appPath string) string {
-	data, err := os.ReadFile(filepath.Join(appPath, "Info.plist"))
+	data, err := os.ReadFile(filepath.Join(appPath, "Info.plist")) //nolint:gosec // G304: appPath is an internal simulator path.
 	if err != nil {
 		return ""
 	}

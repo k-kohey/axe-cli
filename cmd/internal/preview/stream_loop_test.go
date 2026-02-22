@@ -146,8 +146,7 @@ func TestStreamLoop_BootCrash(t *testing.T) {
 	close(bootDied)
 	s.bootCompanion = &fakeCompanion{doneCh: bootDied, err: fmt.Errorf("process exited with code 1")}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	done := make(chan error, 1)
 	go func() {
@@ -187,8 +186,7 @@ func TestStreamLoop_IDBError(t *testing.T) {
 	idbErrCh := make(chan error, 1)
 	idbErrCh <- fmt.Errorf("video stream died")
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	done := make(chan error, 1)
 	go func() {

@@ -8,7 +8,7 @@ import (
 )
 
 // helper: build a plist dict representing a view node and marshal to binary plist.
-func mustMarshalBplistMap(t *testing.T, data map[string]interface{}) []byte {
+func mustMarshalBplistMap(t *testing.T, data map[string]any) []byte {
 	t.Helper()
 	b, err := plist.Marshal(data, plist.BinaryFormat)
 	if err != nil {
@@ -18,16 +18,16 @@ func mustMarshalBplistMap(t *testing.T, data map[string]interface{}) []byte {
 }
 
 // helper: build a simple bplist map with views and classmap.
-func makeBplistMap(views []map[string]interface{}, classmap map[string]string) map[string]interface{} {
-	cm := make(map[string]interface{}, len(classmap))
+func makeBplistMap(views []map[string]any, classmap map[string]string) map[string]any {
+	cm := make(map[string]any, len(classmap))
 	for k, v := range classmap {
 		cm[k] = v
 	}
-	vs := make([]interface{}, len(views))
+	vs := make([]any, len(views))
 	for i, v := range views {
 		vs[i] = v
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"views":    vs,
 		"classmap": cm,
 	}
@@ -35,11 +35,11 @@ func makeBplistMap(views []map[string]interface{}, classmap map[string]string) m
 
 func TestParseBplist(t *testing.T) {
 	original := makeBplistMap(
-		[]map[string]interface{}{
+		[]map[string]any{
 			{
 				"class":   "UIWindow",
 				"address": "0x100",
-				"frame":   []interface{}{0.0, 0.0, 402.0, 874.0},
+				"frame":   []any{0.0, 0.0, 402.0, 874.0},
 			},
 		},
 		map[string]string{
@@ -583,21 +583,21 @@ func TestBuildDetailNode(t *testing.T) {
 
 func TestBuildTree(t *testing.T) {
 	original := makeBplistMap(
-		[]map[string]interface{}{
+		[]map[string]any{
 			{
 				"class":   "UIWindow",
 				"address": "0x100",
-				"frame":   []interface{}{0.0, 0.0, 402.0, 874.0},
-				"subviews": []interface{}{
-					map[string]interface{}{
+				"frame":   []any{0.0, 0.0, 402.0, 874.0},
+				"subviews": []any{
+					map[string]any{
 						"class":   "_UIHostingView<CV>",
 						"address": "0x200",
-						"frame":   []interface{}{0.0, 0.0, 402.0, 874.0},
-						"subviews": []interface{}{
-							map[string]interface{}{
+						"frame":   []any{0.0, 0.0, 402.0, 874.0},
+						"subviews": []any{
+							map[string]any{
 								"class":   "UILabel",
 								"address": "0x300",
-								"frame":   []interface{}{10.0, 20.0, 100.0, 30.0},
+								"frame":   []any{10.0, 20.0, 100.0, 30.0},
 							},
 						},
 					},
@@ -721,21 +721,21 @@ func TestIsHostingViewClassname(t *testing.T) {
 func TestBuildTreeIntegration(t *testing.T) {
 	// Integration test: bplist -> parse -> buildTree -> verify structure
 	original := makeBplistMap(
-		[]map[string]interface{}{
+		[]map[string]any{
 			{
 				"class":   "UIWindow",
 				"address": "0x1",
-				"frame":   []interface{}{0.0, 0.0, 320.0, 568.0},
-				"subviews": []interface{}{
-					map[string]interface{}{
+				"frame":   []any{0.0, 0.0, 320.0, 568.0},
+				"subviews": []any{
+					map[string]any{
 						"class":   "UITransitionView",
 						"address": "0x2",
-						"frame":   []interface{}{0.0, 0.0, 320.0, 568.0},
-						"subviews": []interface{}{
-							map[string]interface{}{
+						"frame":   []any{0.0, 0.0, 320.0, 568.0},
+						"subviews": []any{
+							map[string]any{
 								"class":   "_UIHostingView<ContentView>",
 								"address": "0x3",
-								"frame":   []interface{}{0.0, 0.0, 320.0, 568.0},
+								"frame":   []any{0.0, 0.0, 320.0, 568.0},
 							},
 						},
 					},

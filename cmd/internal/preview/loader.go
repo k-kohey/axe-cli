@@ -39,7 +39,7 @@ func loaderCacheKey(source, sdk, deploymentTarget string) string {
 // compileLoader compiles the Obj-C loader dylib for the simulator.
 // The result is cached: recompilation is skipped if the source hash matches.
 func compileLoader(dirs previewDirs, deploymentTarget string) (string, error) {
-	if err := os.MkdirAll(dirs.Loader, 0o755); err != nil {
+	if err := os.MkdirAll(dirs.Loader, 0o755); err != nil { //nolint:gosec // G301: 0o755 is intentional for directories.
 		return "", fmt.Errorf("creating loader dir: %w", err)
 	}
 
@@ -63,7 +63,7 @@ func compileLoader(dirs previewDirs, deploymentTarget string) (string, error) {
 	}
 
 	srcPath := filepath.Join(dirs.Loader, "loader.m")
-	if err := os.WriteFile(srcPath, []byte(loaderSource), 0o644); err != nil {
+	if err := os.WriteFile(srcPath, []byte(loaderSource), 0o600); err != nil {
 		return "", fmt.Errorf("writing loader source: %w", err)
 	}
 
@@ -81,7 +81,7 @@ func compileLoader(dirs previewDirs, deploymentTarget string) (string, error) {
 		srcPath,
 	}
 	slog.Debug("Compiling loader", "args", compileArgs)
-	if out, err := exec.Command(compileArgs[0], compileArgs[1:]...).CombinedOutput(); err != nil {
+	if out, err := exec.Command(compileArgs[0], compileArgs[1:]...).CombinedOutput(); err != nil { //nolint:gosec // G204: args are constructed internally.
 		return "", fmt.Errorf("compiling loader: %w\n%s", err, out)
 	}
 
@@ -91,7 +91,7 @@ func compileLoader(dirs previewDirs, deploymentTarget string) (string, error) {
 	}
 
 	// Save source hash for cache invalidation
-	if err := os.WriteFile(hashPath, []byte(currentHash), 0o644); err != nil {
+	if err := os.WriteFile(hashPath, []byte(currentHash), 0o600); err != nil {
 		slog.Warn("Failed to write loader hash", "err", err)
 	}
 
@@ -135,8 +135,8 @@ func sendReloadCommand(socketPath, dylibPath string) error {
 	}
 
 	resp := scanner.Text()
-	if strings.HasPrefix(resp, "ERR:") {
-		return fmt.Errorf("loader error: %s", strings.TrimPrefix(resp, "ERR:"))
+	if after, ok := strings.CutPrefix(resp, "ERR:"); ok {
+		return fmt.Errorf("loader error: %s", after)
 	}
 	if resp != "OK" {
 		return fmt.Errorf("unexpected loader response: %s", resp)

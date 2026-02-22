@@ -2,6 +2,7 @@ package preview
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -96,7 +97,8 @@ func swiftParse(path string) (*swiftParseResult, error) {
 	cmd := exec.Command(binPath, "parse", path)
 	out, err := cmd.Output()
 	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
 			return nil, fmt.Errorf("axe-parser failed: %w\n%s", err, ee.Stderr)
 		}
 		return nil, fmt.Errorf("running axe-parser: %w", err)

@@ -2,6 +2,7 @@ package preview
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,7 +100,7 @@ func TestBuildLock_ContextCancellation(t *testing.T) {
 		lock2.Unlock()
 		t.Fatal("Lock2 should have failed due to context cancellation")
 	}
-	if err != context.DeadlineExceeded {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("expected context.DeadlineExceeded, got %v", err)
 	}
 }
@@ -321,7 +322,7 @@ func TestBuildLock_RLockContextCancellation(t *testing.T) {
 		shLock.RUnlock()
 		t.Fatal("RLock should have failed due to context cancellation")
 	}
-	if err != context.DeadlineExceeded {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("expected context.DeadlineExceeded, got %v", err)
 	}
 }

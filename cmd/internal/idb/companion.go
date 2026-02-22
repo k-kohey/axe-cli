@@ -253,7 +253,7 @@ func BootHeadlessWith(cmdr Commander, udid, deviceSetPath string) (*Companion, e
 			if line == "" {
 				continue
 			}
-			var info map[string]interface{}
+			var info map[string]any
 			if err := json.Unmarshal([]byte(line), &info); err == nil {
 				if state, ok := info["state"].(string); ok && state == "Booted" {
 					bootCh <- struct{}{}

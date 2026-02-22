@@ -112,7 +112,7 @@ func TestPresentDetailYAMLWithoutSwiftUI(t *testing.T) {
 	}
 
 	// Should not contain swiftui key
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := yaml.Unmarshal(buf.Bytes(), &raw); err != nil {
 		t.Fatalf("yaml.Unmarshal failed: %v", err)
 	}

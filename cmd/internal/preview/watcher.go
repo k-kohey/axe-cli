@@ -601,7 +601,7 @@ func gitSwiftDirs(root string) ([]string, error) {
 
 	seen := make(map[string]bool)
 	var dirs []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		if line == "" {
 			continue
 		}
@@ -647,7 +647,7 @@ func walkSwiftDirs(root string) ([]string, error) {
 
 // cleanOldDylibs removes thunk dylib and object files older than keepAfter.
 func cleanOldDylibs(thunkDir string, keepAfter int) {
-	for i := 0; i < keepAfter; i++ {
+	for i := range keepAfter {
 		for _, ext := range []string{".dylib", ".o"} {
 			p := filepath.Join(thunkDir, fmt.Sprintf("thunk_%d%s", i, ext))
 			if err := os.Remove(p); err == nil {

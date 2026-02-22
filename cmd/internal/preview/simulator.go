@@ -65,7 +65,7 @@ func stageAppBundle(ctx context.Context, bs *buildSettings, dirs previewDirs) (s
 	// Copy the app bundle to the session-specific staging directory so we
 	// can modify Info.plist without touching the original build artifacts
 	// and without colliding with other preview sessions.
-	if err := os.MkdirAll(dirs.Staging, 0o755); err != nil {
+	if err := os.MkdirAll(dirs.Staging, 0o755); err != nil { //nolint:gosec // G301: 0o755 is intentional for directories.
 		return "", fmt.Errorf("creating staging directory: %w", err)
 	}
 	stagedAppPath := filepath.Join(dirs.Staging, filepath.Base(srcAppPath))
@@ -111,7 +111,7 @@ func rewriteInfoPlist(plistPath, bundleID, displayName string) {
 		return
 	}
 
-	var info map[string]interface{}
+	var info map[string]any
 	if _, err := plist.Unmarshal(data, &info); err != nil {
 		slog.Warn("Failed to decode Info.plist", "path", plistPath, "err", err)
 		return
@@ -126,7 +126,7 @@ func rewriteInfoPlist(plistPath, bundleID, displayName string) {
 		return
 	}
 
-	if err := os.WriteFile(plistPath, out, 0o644); err != nil {
+	if err := os.WriteFile(plistPath, out, 0o600); err != nil {
 		slog.Warn("Failed to write Info.plist", "path", plistPath, "err", err)
 	}
 }

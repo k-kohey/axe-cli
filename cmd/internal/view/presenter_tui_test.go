@@ -552,7 +552,7 @@ func TestLoadSnapshotImage_InvalidPath(t *testing.T) {
 func TestLoadSnapshotImage_NotPNG(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "notimage.txt")
-	if err := os.WriteFile(path, []byte("not a png"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("not a png"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
