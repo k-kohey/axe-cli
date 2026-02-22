@@ -112,8 +112,10 @@ function getWebviewHtml(): string {
 <head>
   <style>
     * { box-sizing: border-box; }
+    html { height: 100%; }
     body {
       margin: 0; padding: 8px;
+      height: 100%;
       background: #1e1e1e; color: #ccc;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
       font-size: 12px;
@@ -121,19 +123,25 @@ function getWebviewHtml(): string {
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      grid-template-rows: 1fr;
       gap: 12px;
+      height: calc(100% - 16px);
+      overflow-y: auto;
     }
     .card {
       background: #2d2d2d; border-radius: 8px;
       overflow: hidden; display: flex; flex-direction: column;
+      min-height: 0;
     }
     .card .preview-container {
       position: relative; background: #000;
       display: flex; justify-content: center; align-items: center;
-      min-height: 200px;
+      flex: 1 1 0;
+      min-height: 0;
+      overflow: hidden;
     }
     .card img {
-      max-width: 100%; max-height: 60vh; object-fit: contain;
+      max-width: 100%; max-height: 100%; object-fit: contain;
       user-select: none; -webkit-user-drag: none;
     }
     .card .status-overlay {
