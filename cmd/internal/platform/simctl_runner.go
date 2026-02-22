@@ -42,6 +42,11 @@ func (r *RealSimctlRunner) Shutdown(ctx context.Context, udid, setPath string) e
 		"shutdown", udid,
 	).CombinedOutput()
 	if err != nil {
+		// "Unable to shutdown device in current state: Shutdown" means the device
+		// is already shut down — treat as success.
+		if strings.Contains(string(out), "current state: Shutdown") {
+			return nil
+		}
 		return fmt.Errorf("simctl shutdown: %w\n%s", err, out)
 	}
 	return nil
