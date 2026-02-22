@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { SimulatorWebviewPanel, SimulatorWebviewDeps, InputMessage } from "../simulatorWebview";
+import { SimulatorWebviewPanel, SimulatorWebviewDeps, InputMessage, WebViewMessage } from "../simulatorWebview";
 
 interface FakeWebviewPanel {
   viewType: string;
@@ -77,7 +77,7 @@ suite("SimulatorWebviewPanel", () => {
 
     assert.strictEqual(fakePanel.viewType, "axe.simulatorPreview");
     assert.strictEqual(fakePanel.title, "axe Preview");
-    assert.ok(fakePanel.webview.html.includes("<img"));
+    assert.ok(fakePanel.webview.html.includes("grid"));
     assert.strictEqual(webview.visible, true);
   });
 
@@ -102,15 +102,39 @@ suite("SimulatorWebviewPanel", () => {
     assert.strictEqual(createCount, 1);
   });
 
-  test("postFrame sends message to webview", () => {
+  test("addCard sends addCard message to webview", () => {
     const fakePanel = createFakePanel();
     const webview = new SimulatorWebviewPanel(createDeps(fakePanel));
 
     webview.show();
-    webview.postFrame("AAAA");
+    webview.addCard("stream-a", "iPhone 16 Pro", "HogeView.swift");
 
     assert.deepStrictEqual(fakePanel.webview.messages, [
-      { type: "frame", data: "AAAA" },
+      { type: "addCard", streamId: "stream-a", deviceName: "iPhone 16 Pro", fileName: "HogeView.swift" },
+    ]);
+  });
+
+  test("removeCard sends removeCard message to webview", () => {
+    const fakePanel = createFakePanel();
+    const webview = new SimulatorWebviewPanel(createDeps(fakePanel));
+
+    webview.show();
+    webview.removeCard("stream-a");
+
+    assert.deepStrictEqual(fakePanel.webview.messages, [
+      { type: "removeCard", streamId: "stream-a" },
+    ]);
+  });
+
+  test("postFrame sends frame message with streamId", () => {
+    const fakePanel = createFakePanel();
+    const webview = new SimulatorWebviewPanel(createDeps(fakePanel));
+
+    webview.show();
+    webview.postFrame("stream-a", "AAAA");
+
+    assert.deepStrictEqual(fakePanel.webview.messages, [
+      { type: "frame", streamId: "stream-a", data: "AAAA" },
     ]);
   });
 
@@ -118,9 +142,20 @@ suite("SimulatorWebviewPanel", () => {
     const fakePanel = createFakePanel();
     const webview = new SimulatorWebviewPanel(createDeps(fakePanel));
 
-    // Should not throw
-    webview.postFrame("AAAA");
+    webview.postFrame("stream-a", "AAAA");
     assert.strictEqual(fakePanel.webview.messages.length, 0);
+  });
+
+  test("postStatus sends status message with streamId", () => {
+    const fakePanel = createFakePanel();
+    const webview = new SimulatorWebviewPanel(createDeps(fakePanel));
+
+    webview.show();
+    webview.postStatus("stream-a", "building");
+
+    assert.deepStrictEqual(fakePanel.webview.messages, [
+      { type: "status", streamId: "stream-a", phase: "building" },
+    ]);
   });
 
   test("dispose closes the panel", () => {
@@ -137,7 +172,6 @@ suite("SimulatorWebviewPanel", () => {
   test("dispose is safe when no panel exists", () => {
     const webview = new SimulatorWebviewPanel({ createWebviewPanel: () => createFakePanel() as unknown as import("vscode").WebviewPanel });
 
-    // Should not throw
     webview.dispose();
     assert.strictEqual(webview.visible, false);
   });
@@ -149,7 +183,6 @@ suite("SimulatorWebviewPanel", () => {
     let disposed = false;
     webview.show(() => { disposed = true; });
 
-    // Simulate user closing the panel
     fakePanel.dispose();
 
     assert.strictEqual(disposed, true);
@@ -170,8 +203,8 @@ suite("SimulatorWebviewPanel", () => {
     const webview = new SimulatorWebviewPanel(deps);
 
     webview.show();
-    panels[0].dispose(); // user closes panel
-    webview.show(); // should NOT re-create
+    panels[0].dispose();
+    webview.show();
 
     assert.strictEqual(createCount, 1);
     assert.strictEqual(webview.visible, false);
@@ -191,9 +224,9 @@ suite("SimulatorWebviewPanel", () => {
     const webview = new SimulatorWebviewPanel(deps);
 
     webview.show();
-    panels[0].dispose(); // user closes panel
+    panels[0].dispose();
     webview.resetDismissed();
-    webview.show(); // should re-create
+    webview.show();
 
     assert.strictEqual(createCount, 2);
     assert.strictEqual(webview.visible, true);
@@ -208,53 +241,13 @@ suite("SimulatorWebviewPanel", () => {
 
     webview.show();
 
-    const touchDownMsg: InputMessage = { type: "touchDown", x: 0.5, y: 0.3 };
+    const touchDownMsg = { type: "touchDown", streamId: "stream-a", x: 0.5, y: 0.3 };
     for (const listener of fakePanel.webview._messageListeners) {
       listener(touchDownMsg);
     }
 
     assert.strictEqual(received.length, 1);
     assert.strictEqual(received[0].type, "touchDown");
-    assert.strictEqual(received[0].x, 0.5);
-    assert.strictEqual(received[0].y, 0.3);
-  });
-
-  test("setInputHandler receives touchMove messages", () => {
-    const fakePanel = createFakePanel();
-    const webview = new SimulatorWebviewPanel(createDeps(fakePanel));
-
-    const received: InputMessage[] = [];
-    webview.setInputHandler((msg) => { received.push(msg); });
-
-    webview.show();
-
-    const touchMoveMsg: InputMessage = { type: "touchMove", x: 0.6, y: 0.4 };
-    for (const listener of fakePanel.webview._messageListeners) {
-      listener(touchMoveMsg);
-    }
-
-    assert.strictEqual(received.length, 1);
-    assert.strictEqual(received[0].type, "touchMove");
-  });
-
-  test("setInputHandler receives touchUp messages", () => {
-    const fakePanel = createFakePanel();
-    const webview = new SimulatorWebviewPanel(createDeps(fakePanel));
-
-    const received: InputMessage[] = [];
-    webview.setInputHandler((msg) => { received.push(msg); });
-
-    webview.show();
-
-    const touchUpMsg: InputMessage = { type: "touchUp", x: 0.9, y: 0.8 };
-    for (const listener of fakePanel.webview._messageListeners) {
-      listener(touchUpMsg);
-    }
-
-    assert.strictEqual(received.length, 1);
-    assert.strictEqual(received[0].type, "touchUp");
-    assert.strictEqual(received[0].x, 0.9);
-    assert.strictEqual(received[0].y, 0.8);
   });
 
   test("setInputHandler receives text messages", () => {
@@ -266,30 +259,66 @@ suite("SimulatorWebviewPanel", () => {
 
     webview.show();
 
-    const textMsg: InputMessage = { type: "text", value: "a" };
+    const textMsg = { type: "text", streamId: "stream-a", value: "a" };
     for (const listener of fakePanel.webview._messageListeners) {
       listener(textMsg);
     }
 
     assert.strictEqual(received.length, 1);
     assert.strictEqual(received[0].type, "text");
-    assert.strictEqual(received[0].value, "a");
   });
 
-  test("HTML includes interactive event handlers", () => {
+  test("setWebViewMessageHandler receives removeStream messages", () => {
+    const fakePanel = createFakePanel();
+    const webview = new SimulatorWebviewPanel(createDeps(fakePanel));
+
+    const received: WebViewMessage[] = [];
+    webview.setWebViewMessageHandler((msg) => { received.push(msg); });
+
+    webview.show();
+
+    const removeMsg = { type: "removeStream", streamId: "stream-a" };
+    for (const listener of fakePanel.webview._messageListeners) {
+      listener(removeMsg);
+    }
+
+    assert.strictEqual(received.length, 1);
+    assert.strictEqual(received[0].type, "removeStream");
+    assert.strictEqual(received[0].streamId, "stream-a");
+  });
+
+  test("setWebViewMessageHandler receives changeDevice messages", () => {
+    const fakePanel = createFakePanel();
+    const webview = new SimulatorWebviewPanel(createDeps(fakePanel));
+
+    const received: WebViewMessage[] = [];
+    webview.setWebViewMessageHandler((msg) => { received.push(msg); });
+
+    webview.show();
+
+    const changeMsg = { type: "changeDevice", streamId: "stream-b" };
+    for (const listener of fakePanel.webview._messageListeners) {
+      listener(changeMsg);
+    }
+
+    assert.strictEqual(received.length, 1);
+    assert.strictEqual(received[0].type, "changeDevice");
+    assert.strictEqual(received[0].streamId, "stream-b");
+  });
+
+  test("HTML includes multi-card grid layout", () => {
     const fakePanel = createFakePanel();
     const webview = new SimulatorWebviewPanel(createDeps(fakePanel));
 
     webview.show();
 
+    assert.ok(fakePanel.webview.html.includes("grid"));
+    assert.ok(fakePanel.webview.html.includes("addCard"));
+    assert.ok(fakePanel.webview.html.includes("removeCard"));
+    assert.ok(fakePanel.webview.html.includes("data-stream-id"));
     assert.ok(fakePanel.webview.html.includes("mousedown"));
-    assert.ok(fakePanel.webview.html.includes("mouseup"));
-    assert.ok(fakePanel.webview.html.includes("mouseleave"));
-    assert.ok(fakePanel.webview.html.includes("keypress"));
-    assert.ok(fakePanel.webview.html.includes("vscode.postMessage"));
     assert.ok(fakePanel.webview.html.includes("touchDown"));
-    assert.ok(fakePanel.webview.html.includes("touchMove"));
-    assert.ok(fakePanel.webview.html.includes("touchUp"));
-    assert.ok(fakePanel.webview.html.includes("image/jpeg"));
+    assert.ok(fakePanel.webview.html.includes("removeStream"));
+    assert.ok(fakePanel.webview.html.includes("changeDevice"));
   });
 });

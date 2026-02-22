@@ -3,6 +3,13 @@ import { InputMessage } from "./previewManager";
 
 export { InputMessage };
 
+/** Messages sent from WebView to Extension. */
+export interface WebViewMessage {
+  type: string;
+  streamId?: string;
+  [key: string]: unknown;
+}
+
 export interface SimulatorWebviewDeps {
   createWebviewPanel?: (
     viewType: string,
@@ -17,6 +24,7 @@ export class SimulatorWebviewPanel {
   private createPanel: NonNullable<SimulatorWebviewDeps["createWebviewPanel"]>;
   private dismissed = false;
   private onInput?: (msg: InputMessage) => void;
+  private onWebViewMessage?: (msg: WebViewMessage) => void;
 
   constructor(deps?: SimulatorWebviewDeps) {
     this.createPanel =
@@ -27,6 +35,10 @@ export class SimulatorWebviewPanel {
 
   setInputHandler(handler: (msg: InputMessage) => void): void {
     this.onInput = handler;
+  }
+
+  setWebViewMessageHandler(handler: (msg: WebViewMessage) => void): void {
+    this.onWebViewMessage = handler;
   }
 
   show(onDispose?: () => void): void {
@@ -40,8 +52,13 @@ export class SimulatorWebviewPanel {
       { enableScripts: true }
     );
     this.panel.webview.html = getWebviewHtml();
-    this.panel.webview.onDidReceiveMessage((msg: InputMessage) => {
-      this.onInput?.(msg);
+    this.panel.webview.onDidReceiveMessage((msg: WebViewMessage) => {
+      // Route touch/text input events to the input handler.
+      if (msg.type === "touchDown" || msg.type === "touchMove" || msg.type === "touchUp" || msg.type === "text") {
+        this.onInput?.(msg as InputMessage);
+      }
+      // Route all messages to the generic handler (for removeStream, changeDevice, nextPreview).
+      this.onWebViewMessage?.(msg);
     });
     this.panel.onDidDispose(() => {
       this.panel = null;
@@ -54,8 +71,24 @@ export class SimulatorWebviewPanel {
     this.dismissed = false;
   }
 
-  postFrame(base64: string): void {
-    this.panel?.webview.postMessage({ type: "frame", data: base64 });
+  /** Add a new card to the grid. */
+  addCard(streamId: string, deviceName: string, fileName: string): void {
+    this.panel?.webview.postMessage({ type: "addCard", streamId, deviceName, fileName });
+  }
+
+  /** Remove a card from the grid. */
+  removeCard(streamId: string): void {
+    this.panel?.webview.postMessage({ type: "removeCard", streamId });
+  }
+
+  /** Update a card's preview frame. */
+  postFrame(streamId: string, base64: string): void {
+    this.panel?.webview.postMessage({ type: "frame", streamId, data: base64 });
+  }
+
+  /** Update a card's status overlay. */
+  postStatus(streamId: string, phase: string): void {
+    this.panel?.webview.postMessage({ type: "status", streamId, phase });
   }
 
   dispose(): void {
@@ -73,65 +106,204 @@ function getWebviewHtml(): string {
 <html>
 <head>
   <style>
-    body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #1e1e1e; overflow: hidden; }
-    img { max-width: 100%; max-height: 100vh; object-fit: contain; user-select: none; -webkit-user-drag: none; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 8px;
+      background: #1e1e1e; color: #ccc;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 12px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 12px;
+    }
+    .card {
+      background: #2d2d2d; border-radius: 8px;
+      overflow: hidden; display: flex; flex-direction: column;
+    }
+    .card .preview-container {
+      position: relative; background: #000;
+      display: flex; justify-content: center; align-items: center;
+      min-height: 200px;
+    }
+    .card img {
+      max-width: 100%; max-height: 60vh; object-fit: contain;
+      user-select: none; -webkit-user-drag: none;
+    }
+    .card .status-overlay {
+      position: absolute; inset: 0;
+      display: flex; justify-content: center; align-items: center;
+      color: #aaa; font-size: 14px;
+    }
+    .card .card-info {
+      padding: 8px 12px; display: flex; flex-direction: column; gap: 2px;
+    }
+    .card .device-name { font-weight: 600; color: #eee; }
+    .card .file-name { color: #888; font-size: 11px; }
+    .card .card-actions {
+      padding: 4px 12px 8px; display: flex; gap: 8px;
+    }
+    .card .card-actions button {
+      background: #3c3c3c; border: none; color: #ccc;
+      padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;
+    }
+    .card .card-actions button:hover { background: #4c4c4c; }
+    .card .card-actions .btn-remove { margin-left: auto; color: #e88; }
   </style>
 </head>
 <body>
-  <img id="preview" />
+  <div class="grid" id="grid"></div>
   <script>
     const vscode = acquireVsCodeApi();
-    const img = document.getElementById('preview');
+    const grid = document.getElementById('grid');
+
+    // Track per-card drag state.
+    const dragStates = {};
 
     window.addEventListener('message', (e) => {
-      if (e.data.type === 'frame') {
-        img.src = 'data:image/jpeg;base64,' + e.data.data;
+      const msg = e.data;
+      switch (msg.type) {
+        case 'addCard': {
+          if (document.querySelector('[data-stream-id="' + msg.streamId + '"]')) return;
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.dataset.streamId = msg.streamId;
+
+          const previewContainer = document.createElement('div');
+          previewContainer.className = 'preview-container';
+          const img = document.createElement('img');
+          img.className = 'preview-image';
+          const overlay = document.createElement('div');
+          overlay.className = 'status-overlay';
+          overlay.textContent = 'Initializing...';
+          previewContainer.appendChild(img);
+          previewContainer.appendChild(overlay);
+
+          const cardInfo = document.createElement('div');
+          cardInfo.className = 'card-info';
+          const deviceSpan = document.createElement('span');
+          deviceSpan.className = 'device-name';
+          deviceSpan.textContent = msg.deviceName || '';
+          const fileSpan = document.createElement('span');
+          fileSpan.className = 'file-name';
+          fileSpan.textContent = msg.fileName || '';
+          cardInfo.appendChild(deviceSpan);
+          cardInfo.appendChild(fileSpan);
+
+          const cardActions = document.createElement('div');
+          cardActions.className = 'card-actions';
+          const btnDevice = document.createElement('button');
+          btnDevice.className = 'btn-device';
+          btnDevice.textContent = 'Device';
+          const btnNext = document.createElement('button');
+          btnNext.className = 'btn-next';
+          // TODO(Phase 4): Show "Next" button when previewCount > 1 (from StreamStarted event).
+          // Currently hidden because nextPreview dispatching per-stream is not yet implemented on the CLI side.
+          btnNext.style.display = 'none';
+          btnNext.textContent = 'Next';
+          const btnRemove = document.createElement('button');
+          btnRemove.className = 'btn-remove';
+          btnRemove.textContent = '\u00d7';
+          cardActions.appendChild(btnDevice);
+          cardActions.appendChild(btnNext);
+          cardActions.appendChild(btnRemove);
+
+          card.appendChild(previewContainer);
+          card.appendChild(cardInfo);
+          card.appendChild(cardActions);
+          grid.appendChild(card);
+          setupCardEvents(card, msg.streamId);
+          break;
+        }
+        case 'removeCard': {
+          const el = document.querySelector('[data-stream-id="' + msg.streamId + '"]');
+          if (el) el.remove();
+          break;
+        }
+        case 'frame': {
+          const img = document.querySelector('[data-stream-id="' + msg.streamId + '"] .preview-image');
+          if (img) {
+            img.src = 'data:image/jpeg;base64,' + msg.data;
+            const overlay = document.querySelector('[data-stream-id="' + msg.streamId + '"] .status-overlay');
+            if (overlay) overlay.style.display = 'none';
+          }
+          break;
+        }
+        case 'status': {
+          const overlay = document.querySelector('[data-stream-id="' + msg.streamId + '"] .status-overlay');
+          if (overlay) {
+            overlay.textContent = msg.phase;
+            overlay.style.display = 'flex';
+          }
+          break;
+        }
       }
     });
 
-    let dragStart = null;
-    let moveScheduled = false;
-    img.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      const rect = img.getBoundingClientRect();
-      dragStart = {
-        x: (e.clientX - rect.left) / rect.width,
-        y: (e.clientY - rect.top) / rect.height,
-        time: Date.now()
-      };
-      vscode.postMessage({ type: 'touchDown', x: dragStart.x, y: dragStart.y });
-    });
-    img.addEventListener('mousemove', (e) => {
-      if (!dragStart || moveScheduled) return;
-      moveScheduled = true;
-      const rect = img.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width;
-      const y = (e.clientY - rect.top) / rect.height;
-      requestAnimationFrame(() => {
-        vscode.postMessage({ type: 'touchMove', x, y });
-        moveScheduled = false;
-      });
-    });
-    img.addEventListener('mouseup', (e) => {
-      if (!dragStart) return;
-      const rect = img.getBoundingClientRect();
-      const endX = (e.clientX - rect.left) / rect.width;
-      const endY = (e.clientY - rect.top) / rect.height;
-      vscode.postMessage({ type: 'touchUp', x: endX, y: endY });
-      dragStart = null;
-    });
-    img.addEventListener('mouseleave', (e) => {
-      if (!dragStart) return;
-      const rect = img.getBoundingClientRect();
-      const endX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const endY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-      vscode.postMessage({ type: 'touchUp', x: endX, y: endY });
-      dragStart = null;
-    });
+    function setupCardEvents(card, streamId) {
+      const img = card.querySelector('.preview-image');
 
+      // Touch events with streamId.
+      img.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const rect = img.getBoundingClientRect();
+        dragStates[streamId] = { moveScheduled: false };
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
+        vscode.postMessage({ type: 'touchDown', streamId, x, y });
+      });
+      img.addEventListener('mousemove', (e) => {
+        const state = dragStates[streamId];
+        if (!state || state.moveScheduled) return;
+        state.moveScheduled = true;
+        const rect = img.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
+        requestAnimationFrame(() => {
+          vscode.postMessage({ type: 'touchMove', streamId, x, y });
+          state.moveScheduled = false;
+        });
+      });
+      img.addEventListener('mouseup', (e) => {
+        if (!dragStates[streamId]) return;
+        const rect = img.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
+        vscode.postMessage({ type: 'touchUp', streamId, x, y });
+        delete dragStates[streamId];
+      });
+      img.addEventListener('mouseleave', (e) => {
+        if (!dragStates[streamId]) return;
+        const rect = img.getBoundingClientRect();
+        const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+        vscode.postMessage({ type: 'touchUp', streamId, x, y });
+        delete dragStates[streamId];
+      });
+
+      // Action buttons.
+      card.querySelector('.btn-remove').addEventListener('click', () => {
+        vscode.postMessage({ type: 'removeStream', streamId });
+      });
+      card.querySelector('.btn-device').addEventListener('click', () => {
+        vscode.postMessage({ type: 'changeDevice', streamId });
+      });
+      card.querySelector('.btn-next').addEventListener('click', () => {
+        vscode.postMessage({ type: 'nextPreview', streamId });
+      });
+    }
+
+    // Global keypress → send to all cards.
+    // TODO(Phase 4): Track which card has focus and send input only to that card.
+    // Currently broadcasts to all streams because WebView focus management (card selection,
+    // visual indicator, keyboard shortcut conflicts) is scoped out of Phase 1-2.
     document.addEventListener('keypress', (e) => {
       if (e.key.length === 1) {
-        vscode.postMessage({ type: 'text', value: e.key });
+        const cards = document.querySelectorAll('.card');
+        cards.forEach(card => {
+          vscode.postMessage({ type: 'text', streamId: card.dataset.streamId, value: e.key });
+        });
       }
     });
   </script>

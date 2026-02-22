@@ -1,19 +1,17 @@
 import * as vscode from "vscode";
 import { spawn } from "child_process";
 
-export interface ManagedSimulator {
-  udid: string;
-  name: string;
-  runtime: string;
-  runtimeId: string;
-  state: string;
-  isDefault: boolean;
-}
-
 export interface AvailableDeviceType {
   identifier: string;
   name: string;
   runtimes: { identifier: string; name: string }[];
+}
+
+/** Device type + runtime selection for multi-stream mode. */
+export interface DeviceSelection {
+  deviceType: string;
+  runtime: string;
+  name: string;
 }
 
 const EXEC_TIMEOUT_MS = 30_000;
@@ -57,80 +55,12 @@ export function execAxe(execPath: string, args: string[], cwd?: string): Promise
 }
 
 /**
- * Shows a QuickPick to select an existing managed simulator.
- * Returns the selected UDID, or undefined if cancelled.
- * If no simulators exist, prompts the user to add one.
+ * Shows a multi-step QuickPick to select a device type and runtime.
  */
-export async function selectSimulator(
+async function pickDeviceTypeAndRuntime(
   execPath: string,
   cwd?: string
-): Promise<string | undefined> {
-  let managed: ManagedSimulator[];
-  try {
-    const raw = await execAxe(execPath, ["preview", "simulator", "list", "--json"], cwd);
-    managed = JSON.parse(raw);
-  } catch (err) {
-    vscode.window.showErrorMessage(`Failed to list simulators: ${err}`);
-    return undefined;
-  }
-
-  if (managed.length === 0) {
-    const action = await vscode.window.showInformationMessage(
-      "No preview simulators found. Add one?",
-      "Add Simulator"
-    );
-    if (action === "Add Simulator") {
-      return addSimulator(execPath, cwd);
-    }
-    return undefined;
-  }
-
-  interface SimItem extends vscode.QuickPickItem {
-    udid: string;
-  }
-
-  const items: SimItem[] = managed.map((s) => ({
-    label: s.name,
-    description: `${s.runtime} · ${s.state}${s.isDefault ? " (default)" : ""}`,
-    detail: s.udid,
-    udid: s.udid,
-  }));
-  items.push({
-    label: "$(add) Add new simulator...",
-    description: "",
-    detail: "",
-    udid: "",
-  });
-
-  const picked = await vscode.window.showQuickPick(items, {
-    placeHolder: "Select a simulator for preview",
-  });
-
-  if (!picked) {
-    return undefined;
-  }
-  if (picked.udid === "") {
-    return addSimulator(execPath, cwd);
-  }
-
-  // Set as global default in CLI config.
-  try {
-    await execAxe(execPath, ["preview", "simulator", "default", picked.udid], cwd);
-  } catch (err) {
-    vscode.window.showWarningMessage(`Selected simulator will be used, but failed to save as default: ${err}`);
-  }
-
-  return picked.udid;
-}
-
-/**
- * Shows a multi-step QuickPick to add a new simulator.
- * Returns the UDID of the created simulator, or undefined if cancelled.
- */
-export async function addSimulator(
-  execPath: string,
-  cwd?: string
-): Promise<string | undefined> {
+): Promise<DeviceSelection | undefined> {
   let available: AvailableDeviceType[];
   try {
     const raw = await execAxe(
@@ -163,7 +93,7 @@ export async function addSimulator(
   }));
 
   const pickedType = await vscode.window.showQuickPick(typeItems, {
-    placeHolder: "Select device type",
+    placeHolder: "Select device type for preview",
   });
   if (!pickedType) {
     return undefined;
@@ -181,30 +111,26 @@ export async function addSimulator(
   }));
 
   const pickedRuntime = await vscode.window.showQuickPick(runtimeItems, {
-    placeHolder: "Select runtime",
+    placeHolder: "Select runtime for preview",
   });
   if (!pickedRuntime) {
     return undefined;
   }
 
-  // Step 3: Create the simulator.
-  try {
-    const raw = await execAxe(
-      execPath,
-      [
-        "preview", "simulator", "add",
-        "--device-type", pickedType.identifier,
-        "--runtime", pickedRuntime.identifier,
-        "--set-default",
-        "--json",
-      ],
-      cwd
-    );
-    const created: ManagedSimulator = JSON.parse(raw);
-    vscode.window.showInformationMessage(`Added simulator: ${created.name}`);
-    return created.udid;
-  } catch (err) {
-    vscode.window.showErrorMessage(`Failed to add simulator: ${err}`);
-    return undefined;
-  }
+  return {
+    deviceType: pickedType.identifier,
+    runtime: pickedRuntime.identifier,
+    name: pickedType.label,
+  };
+}
+
+/**
+ * Shows a multi-step QuickPick to select a device type and runtime for preview.
+ * Returns the selection for use with AddStream, or undefined if cancelled.
+ */
+export async function selectDevice(
+  execPath: string,
+  cwd?: string
+): Promise<DeviceSelection | undefined> {
+  return pickDeviceTypeAndRuntime(execPath, cwd);
 }
