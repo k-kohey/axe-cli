@@ -288,13 +288,22 @@ func TestDevicePool_Release_ShutdownError(t *testing.T) {
 		t.Fatalf("Acquire: %v", err)
 	}
 
+	// Simulate the device being Booted (as it would be in real usage).
+	runner.mu.Lock()
+	if d, ok := runner.devices[udid]; ok {
+		d.State = "Booted"
+		runner.devices[udid] = d
+	}
+	runner.mu.Unlock()
+
 	runner.shutdownErr = fmt.Errorf("simctl shutdown failed")
 	err = pool.Release(context.Background(), udid)
 	if err == nil {
 		t.Fatal("expected error from Release, got nil")
 	}
 
-	// The device should NOT be in the pool (shutdown failed, state is unknown).
+	// The device should NOT be in the pool (shutdown failed, device remains Booted).
+	// Priority 2 (reuse from set) also skips it because it is not Shutdown.
 	runner.shutdownErr = nil
 	udid2, err := pool.Acquire(context.Background(), testDeviceType, testRuntime)
 	if err != nil {
@@ -687,5 +696,115 @@ func TestDevicePool_Acquire_WritesMetaFile(t *testing.T) {
 	// LastUsed should be recent.
 	if time.Since(meta.LastUsed) > 5*time.Second {
 		t.Errorf("LastUsed too old: %v", meta.LastUsed)
+	}
+}
+
+func TestDevicePool_Acquire_ReusesShutdownDeviceFromSet(t *testing.T) {
+	runner := newFakeSimctlRunner()
+	// Add a Shutdown device with matching type+runtime in the device set.
+	runner.addDevice("SHUTDOWN-1", "axe iPhone 16 Pro (1)", testDeviceType, testRuntime, "Shutdown")
+
+	pool := newTestPool(t, runner)
+
+	udid, err := pool.Acquire(context.Background(), testDeviceType, testRuntime)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+
+	// Should reuse the existing Shutdown device without clone or create.
+	if udid != "SHUTDOWN-1" {
+		t.Errorf("expected SHUTDOWN-1, got %s", udid)
+	}
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	if runner.cloneCalls != 0 {
+		t.Errorf("expected 0 Clone calls, got %d", runner.cloneCalls)
+	}
+	if runner.createCalls != 0 {
+		t.Errorf("expected 0 Create calls, got %d", runner.createCalls)
+	}
+}
+
+func TestDevicePool_Acquire_SkipsBootedDevice_FallsBackToClone(t *testing.T) {
+	runner := newFakeSimctlRunner()
+	// Only a Booted device exists — cannot be reused, should fall back to clone.
+	runner.addDevice("BOOTED-1", "axe iPhone 16 Pro (1)", testDeviceType, testRuntime, "Booted")
+
+	pool := newTestPool(t, runner)
+
+	udid, err := pool.Acquire(context.Background(), testDeviceType, testRuntime)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	if udid == "BOOTED-1" {
+		t.Error("should not reuse a Booted device")
+	}
+
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	if runner.cloneCalls != 1 {
+		t.Errorf("expected 1 Clone call, got %d", runner.cloneCalls)
+	}
+}
+
+func TestDevicePool_Acquire_SkipsLockedShutdownDevice(t *testing.T) {
+	runner := newFakeSimctlRunner()
+	setPath := t.TempDir()
+	pool := NewDevicePool(runner, setPath)
+
+	// Add a Shutdown device with matching type+runtime.
+	runner.addDevice("LOCKED-1", "axe iPhone 16 Pro (1)", testDeviceType, testRuntime, "Shutdown")
+
+	// Hold a lock on this device (simulates another process using it).
+	lockPath := filepath.Join(setPath, "LOCKED-1.lock")
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		t.Fatalf("creating lock file: %v", err)
+	}
+	defer func() { _ = lockFile.Close() }()
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatalf("acquiring lock: %v", err)
+	}
+	defer func() { _ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN) }()
+
+	udid, err := pool.Acquire(context.Background(), testDeviceType, testRuntime)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+
+	// Should NOT reuse the locked device; should fall back to clone.
+	if udid == "LOCKED-1" {
+		t.Error("should not reuse a locked device")
+	}
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	if runner.cloneCalls != 1 {
+		t.Errorf("expected 1 Clone call (fallback from locked device), got %d", runner.cloneCalls)
+	}
+}
+
+func TestDevicePool_Acquire_SkipsShutdownDeviceWithDifferentType(t *testing.T) {
+	runner := newFakeSimctlRunner()
+	// Add a Shutdown device with a DIFFERENT type — should not be reused.
+	runner.addDevice("IPAD-1", "axe iPad Air (1)", otherDeviceType, otherRuntime, "Shutdown")
+
+	pool := newTestPool(t, runner)
+
+	udid, err := pool.Acquire(context.Background(), testDeviceType, testRuntime)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	if udid == "IPAD-1" {
+		t.Error("should not reuse a device with different type/runtime")
+	}
+
+	// No matching device exists, so should fall through to Create.
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	if runner.cloneCalls != 0 {
+		t.Errorf("expected 0 Clone calls, got %d", runner.cloneCalls)
+	}
+	if runner.createCalls != 1 {
+		t.Errorf("expected 1 Create call, got %d", runner.createCalls)
 	}
 }

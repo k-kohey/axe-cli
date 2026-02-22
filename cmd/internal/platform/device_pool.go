@@ -58,7 +58,8 @@ func NewDevicePool(simctl SimctlRunner, deviceSetPath string) *DevicePool {
 }
 
 // Acquire obtains a simulator matching deviceType + runtime.
-// Priority: 1. Shutdown device in pool → 2. Clone existing → 3. Create new.
+// Priority: 1. Shutdown device in pool → 2. Reuse Shutdown device from device set
+// → 3. Clone existing → 4. Create new.
 func (p *DevicePool) Acquire(ctx context.Context, deviceType, runtime string) (string, error) {
 	p.mu.Lock()
 
@@ -83,20 +84,43 @@ func (p *DevicePool) Acquire(ctx context.Context, deviceType, runtime string) (s
 	defer listCancel()
 	devices, err := p.simctl.ListDevices(listCtx, p.deviceSetPath)
 	if err != nil {
-		slog.Debug("Failed to list devices for clone", "err", err)
+		slog.Debug("Failed to list devices", "err", err)
 		devices = nil
 	}
 
-	// Find a clone source with matching deviceType + runtime.
+	// Priority 2: reuse a Shutdown device from the device set.
+	// Also find a clone source (any device with matching type+runtime) in the same pass.
 	var cloneSource string
 	for _, d := range devices {
-		if d.DeviceTypeIdentifier == deviceType && d.RuntimeID == runtime {
-			cloneSource = d.UDID
-			break
+		if d.DeviceTypeIdentifier != deviceType || d.RuntimeID != runtime {
+			continue
 		}
+		if cloneSource == "" {
+			cloneSource = d.UDID
+		}
+		if d.State != "Shutdown" {
+			continue
+		}
+		p.mu.Lock()
+		if _, alreadyInUse := p.inUse[d.UDID]; alreadyInUse {
+			p.mu.Unlock()
+			continue
+		}
+		p.inUse[d.UDID] = poolEntry{UDID: d.UDID, DeviceType: deviceType, Runtime: runtime}
+		p.mu.Unlock()
+
+		if p.acquireLockFile(d.UDID) {
+			p.writeMetaFile(d.UDID)
+			slog.Info("Reusing existing device from set", "udid", d.UDID, "deviceType", deviceType, "runtime", runtime)
+			return d.UDID, nil
+		}
+		// Lock acquisition failed — another process is using this device.
+		p.mu.Lock()
+		delete(p.inUse, d.UDID)
+		p.mu.Unlock()
 	}
 
-	// Priority 2: clone an existing device.
+	// Priority 3: clone an existing device.
 	if cloneSource != "" {
 		name := p.nextDeviceName(devices, deviceType)
 		cloneCtx, cloneCancel := context.WithTimeout(ctx, simctlTimeout)
@@ -107,32 +131,52 @@ func (p *DevicePool) Acquire(ctx context.Context, deviceType, runtime string) (s
 		} else {
 			entry := poolEntry{UDID: udid, DeviceType: deviceType, Runtime: runtime}
 			p.mu.Lock()
-			p.inUse[udid] = entry
-			p.mu.Unlock()
-			p.acquireLockFile(udid)
-			p.writeMetaFile(udid)
-			slog.Info("Cloned device", "udid", udid, "source", cloneSource)
-			return udid, nil
+			if _, alreadyClaimed := p.inUse[udid]; alreadyClaimed {
+				// A concurrent Acquire (Priority 2) grabbed this device between
+				// Clone and here. The cloned device is orphaned; GC will clean it up.
+				p.mu.Unlock()
+				slog.Debug("Cloned device already claimed by concurrent acquire", "udid", udid)
+			} else {
+				p.inUse[udid] = entry
+				p.mu.Unlock()
+				p.acquireLockFile(udid)
+				p.writeMetaFile(udid)
+				slog.Info("Cloned device", "udid", udid, "source", cloneSource)
+				return udid, nil
+			}
 		}
 	}
 
-	// Priority 3: create a new device.
-	name := p.nextDeviceName(devices, deviceType)
-	createCtx, createCancel := context.WithTimeout(ctx, simctlTimeout)
-	defer createCancel()
-	udid, err := p.simctl.Create(createCtx, name, deviceType, runtime, p.deviceSetPath)
-	if err != nil {
-		return "", fmt.Errorf("creating device: %w", err)
-	}
+	// Priority 4: create a new device.
+	// Loop to retry if a concurrent Acquire (Priority 2) claims the device
+	// between Create and the inUse registration.
+	const maxCreateRetries = 3
+	for attempt := 0; attempt < maxCreateRetries; attempt++ {
+		name := p.nextDeviceName(devices, deviceType)
+		createCtx, createCancel := context.WithTimeout(ctx, simctlTimeout)
+		udid, err := p.simctl.Create(createCtx, name, deviceType, runtime, p.deviceSetPath)
+		createCancel()
+		if err != nil {
+			return "", fmt.Errorf("creating device: %w", err)
+		}
 
-	entry := poolEntry{UDID: udid, DeviceType: deviceType, Runtime: runtime}
-	p.mu.Lock()
-	p.inUse[udid] = entry
-	p.mu.Unlock()
-	p.acquireLockFile(udid)
-	p.writeMetaFile(udid)
-	slog.Info("Created new device", "udid", udid, "deviceType", deviceType, "runtime", runtime)
-	return udid, nil
+		entry := poolEntry{UDID: udid, DeviceType: deviceType, Runtime: runtime}
+		p.mu.Lock()
+		if _, alreadyClaimed := p.inUse[udid]; alreadyClaimed {
+			// A concurrent Acquire (Priority 2) grabbed this device between
+			// Create and here. The created device is orphaned; GC will clean it up.
+			p.mu.Unlock()
+			slog.Debug("Created device already claimed by concurrent acquire", "udid", udid)
+			continue
+		}
+		p.inUse[udid] = entry
+		p.mu.Unlock()
+		p.acquireLockFile(udid)
+		p.writeMetaFile(udid)
+		slog.Info("Created new device", "udid", udid, "deviceType", deviceType, "runtime", runtime)
+		return udid, nil
+	}
+	return "", fmt.Errorf("failed to create device after %d attempts (concurrent claim conflicts)", maxCreateRetries)
 }
 
 // Release shuts down a device and returns it to the pool for reuse.
@@ -283,22 +327,24 @@ func (p *DevicePool) GarbageCollect(ctx context.Context) {
 // acquireLockFile creates and holds an exclusive flock for the device.
 // The OS automatically releases the flock on process exit (including SIGKILL),
 // allowing CleanupOrphans to detect zombie devices.
-func (p *DevicePool) acquireLockFile(udid string) {
+// Returns true if the lock was successfully acquired.
+func (p *DevicePool) acquireLockFile(udid string) bool {
 	lockPath := filepath.Join(p.deviceSetPath, udid+".lock")
 	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		slog.Debug("Failed to open lock file", "path", lockPath, "err", err)
-		return
+		return false
 	}
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		slog.Debug("Failed to acquire flock", "path", lockPath, "err", err)
 		_ = f.Close()
-		return
+		return false
 	}
 
 	p.mu.Lock()
 	p.lockFiles[udid] = f
 	p.mu.Unlock()
+	return true
 }
 
 // closeLockFile releases the flock and closes the file handle for a device.
